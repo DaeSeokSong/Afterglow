@@ -136,7 +136,7 @@ git clone https://github.com/DaeSeokSong/Afterglow.git
 cd Afterglow/server
 npm install
 npm run build              # tsc → dist/
-npm test                   # vitest (317 tests)
+npm test                   # vitest (321 tests)
 npm run test:stdio         # real MCP stdio handshake (all 8 tools, every action family + grounding round-trips)
 npm run test:all           # typecheck → build → unit → stdio
 ```

@@ -143,7 +143,7 @@ claude /afterglow ask    jiyoon "..."
 | 명령 | 라우팅 | 담당 | 예시 |
 | --- | --- | --- | --- |
 | `afterglow:agent` | `action` + (`slug` …) | `list` · `status`(대시보드) · `inspect` · `edit`(필드 / `open` 에디터 / `revalidate`) · `sign` · `resume` · `archive` · `restore` · `history` · `init` | `agent → action:sign, slug:jiyoon, signer:이지윤` |
-| `afterglow:interview` | `action` + (`slug` `session` …) | 인계자 주도 인터뷰 — `start`(질문 자동 제안) · `add-question` · `answer` · `gap-check` · `attach`(음성·영상) · `transcribe`(WASM whisper) · `export-sheet`/`import-answers`(HTML 답변지) · `finalize`(이중 서명) — 그리고 퇴사자 본인 셀프 검수는 `handoff-start` · `handoff-review` · `handoff-status` · `handoff-finalize` · `handoff-abort` | `interview → slug:jiyoon, action:start, mode:async` |
+| `afterglow:interview` | `action` + (`slug` `session` …) | 인계자 주도 인터뷰 — `start`(질문 자동 제안) · `add-question` · `answer` · `gap-check` · `attach`(음성·영상) · `transcribe`(WASM whisper) · `export-sheet`/`import-answers`(HTML 답변지 — ≤0.12 구버전 질문지/답변 JSON 도 인식) · `finalize`(이중 서명) — 그리고 퇴사자 본인 셀프 검수는 `handoff-start` · `handoff-review` · `handoff-status` · `handoff-finalize` · `handoff-abort` | `interview → slug:jiyoon, action:start, mode:async` |
 | `afterglow:share` | `action` + (`slugs`/`input` …) | `export`(Ed25519 서명 번들) · `import`(서명+무결성 검증, 변조 번들 거부) · `verify`(읽기전용 사전 점검) | `share → action:export, slugs:jiyoon` |
 | `afterglow:admin` | `area` + `action` | `access`(호출 권한) · `audit`(해시체인 로그+체크포인트) · `correct`(feedback · edit-answer · save-rule · record-answer · data-subject-export) · `version`(스냅샷/diff/rollback/tag) · `gc`(보존 정리, 기본 dry-run) | `admin → area:version, action:rollback, slug:jiyoon, versionA:v3` |
 
@@ -368,7 +368,7 @@ Afterglow/
 │  │  ├─ portable.ts       ← 번들 manifest + 해시 + 인젝션 스캔
 │  │  ├─ audit.ts          ← SHA-256 hash-chained immutable log
 │  │  └─ tools/            ← 8 도구: guide · create · learn · ask + agent · interview · share · admin 라우터
-│  └─ test/                ← vitest 317 + stdio 핸드셰이크 (8 도구 + 액션 라우팅)
+│  └─ test/                ← vitest 321 + stdio 핸드셰이크 (8 도구 + 액션 라우팅)
 │
 └─ docs/
    └─ design-source/       ← claude.ai/design 핸드오프 원본 (JSX) — 참조용
@@ -471,6 +471,7 @@ Afterglow v0.2.0 은 **PoC 단계**입니다. 운영 배포 전 알아두면 좋
 - [x] **신규 인터뷰 자동 질문 제안** — `interview start` 시 4-신호 갭 분석을 동봉하고 "이 질문들로 진행할까요?" 를 자동으로 물어봄 (`suggest=false` 로 해제)
 - [x] **인자 자동 안내(elicitation)** — 필수 인자를 비우고 실행하면 도구가 번호 선택지(+`직접 입력`) 와 `[필수]`/`[선택]` 표기로 안내. 후보는 동적(기존 slug·action enum·회차 id·대기 질문 id 등)
 - [x] **인터뷰 진행 방식 선택** — 실시간(`mode=sync`, 그 자리에서 `answer`) vs **파일 기반**(`mode=async`): `export-sheet` 가 **자체완결 HTML 답변지**(체크박스 UI: 답변함/거절/해당없음/의미없음 · `localStorage` 자동저장 — 닫았다 다시 열어도 복원) 또는 `--format md` 로 마크다운. 퇴사자가 "답변 JSON 내려받기" 로 회신 → `import-answers` 가 JSON/MD 자동 감지 후 반영
+- [x] **구버전 답변지 재활용 (v0.13)** — `import-answers` 가 옛 버전 산출물도 인식: ≤0.12 답변 JSON(`{…, answers:[{id, title, declined, answer}]}`)은 회차에 없는 질문을 **제목으로 자동 등록(backfill)** 하며 바로 반영되고, 구버전 HTML 질문지는 **질문 전문을 회차에 먼저 심어** 이어 넣는 답변 JSON 이 같은 id 로 매칭 — 업그레이드 후 재인터뷰 불필요
 - [x] **답변 회수 / 감사 루프 닫기** — `correct --action record-answer` 로 Claude 가 만든 답변(질문·답·신뢰도·출처)을 `answers.log` 에 회수 저장 → `correct list` 에 보정 기록과 함께 표시. 그동안 ask 가 컨텍스트 번들만 돌려주고 "실제 답변"이 Afterglow 에 안 남던 감사 공백을 메움
 - [x] **mutator per-tool ACL** — `correct` · `edit` · `version`(rollback·tag·snapshot) 이 `caller` + agent 의 access policy 게이트를 받음 (deny 정책일 때 `caller` 필수)
 - [x] **persona.bio 잘림 버그 수정** — 누적이 20k 초과 시 *오래된* 인터뷰 보강 블록부터 드롭(이전엔 새 블록을 버림). `renderInterviewBlock` 에 `skipped`(해당없음/의미없음) 섹션 추가 — 본인이 표시한 N/A 정보가 persona.bio 에 흡수돼서 다음 ask 가 짐작하지 않음
@@ -482,7 +483,7 @@ Afterglow v0.2.0 은 **PoC 단계**입니다. 운영 배포 전 알아두면 좋
 - [x] **사용성 (v0.11)** — **`guide`**(상태별 시작 안내) · **`learn`**(자료 추가 — 텍스트/파일/폴더/URL, 숨은 폴더 찾을 필요 없음) · **`create --signer`**(자동 init+활성화 → 핵심 3단계 `create → learn → ask`, init 불필요)
 - [x] **근거 기반 / 할루시네이션 방지 (v0.12)** — `ask`(단독·합동) 번들이 **답변 규칙(grounding contract)** 으로 시작(`[소개]`/`[n]`/`[보정]` 인용 못 하면 말하지 말 것) + 백엔드 독립적 **충족도 게이트**(판정 근거없음/매우부족/부분/충분, 빠진 핵심어 명시)로 없는 정보는 거절하게 강제. 신뢰도 버그(BM25 매칭이면 ~100% 로 뜨던 것) 수정 + 한국어 조사 제거로 굴절형 검색 실제 동작. 다각도 QA(빈자료/무관/부분/인젝션/dense백엔드/합동 ask)로 증명
 - [x] **슬래시 명령** `/mcp__afterglow__<이름>` — MCP prompt 8종(도구 전부)으로 `afterglow:` 입력→Tab 호출
-- [x] vitest 317개 + stdio 핸드셰이크 (8 도구 + 액션 라우팅 · prompts 검증 · 할루시네이션 방지 QA 포함)
+- [x] vitest 321개 + stdio 핸드셰이크 (8 도구 + 액션 라우팅 · prompts 검증 · 할루시네이션 방지 QA 포함)
 - [x] npm 퍼블리시 (`@daeseoksong/afterglow-mcp`)
 - [x] **핸즈온 Jupyter 노트북** ([`docs/afterglow-hands-on.ipynb`](./docs/afterglow-hands-on.ipynb)) — 초보자용 전 기능 따라하기
 

@@ -164,6 +164,8 @@ sequenceDiagram
 > v0.4 에서 RAG 랭킹이 <b>BM25</b> 로 업그레이드(+ opt-in <b>dense-vector</b> 백엔드 `AFTERGLOW_RAG_BACKEND=dense`), <code>transcribe</code> 에 <b>--download/--list-models</b>(ggml 모델 관리)가 추가됐습니다.
 >
 > v0.8 에서 <b>WASM whisper 엔진</b>(<code>transcribe --apply</code>, `@xenova/transformers` optionalDependency — 네이티브 빌드 불필요), <b>하이브리드 RAG 재랭킹</b>(dense+lexical RRF 융합), 전사본 <b>PII 마스킹</b>(`AFTERGLOW_PII_REDACT=1`)·<b>저장 암호화</b>(`AFTERGLOW_ENCRYPTION_KEY`, AES-256-GCM), <code>interview start</code> 의 <b>자동 질문 제안</b>(진행 여부 자동 질의)이 추가됐습니다.
+>
+> v0.13 에서 <code>import-answers</code> 가 <b>구버전(≤0.12) 산출물을 재활용</b>합니다 — 옛 답변 JSON(<code>{…, answers:[{id, title, declined, answer}]}</code>)은 회차에 없는 질문을 제목으로 <b>자동 등록(backfill)</b> 하며 반영되고, 구버전 HTML 질문지는 질문 전문을 회차에 심어(seed) 이어 넣는 답변 JSON 이 같은 id 로 매칭됩니다.
 
 <details>
 <summary><b>입력 스키마 자세히 보기</b></summary>
@@ -332,7 +334,7 @@ git clone https://github.com/DaeSeokSong/Afterglow.git
 cd Afterglow/server
 npm install
 npm run build              # tsc → dist/
-npm test                   # vitest (317 tests)
+npm test                   # vitest (321 tests)
 npm run test:stdio         # 실제 MCP stdio 핸드셰이크 (8 도구 + 모든 액션 패밀리 라운드트립)
 npm run test:all           # 전체 (unit → build → stdio)
 ```
@@ -367,7 +369,7 @@ server/
 │     ├─ elicit.ts          ← 누락 인자 번호-메뉴 안내
 │     ├─ acl.ts             ← mutator per-tool ACL
 │     └─ types.ts           ← ToolReply + safe() 래퍼
-├─ test/                    ← vitest 317 tests (21 파일)
+├─ test/                    ← vitest 321 tests (21 파일)
 │  ├─ restructure.test.ts   ← v0.13 라우팅 (agent/share/admin 라우터 · ask multi · handoff-*)
 │  ├─ grounding.test.ts     ← 할루시네이션 방지 QA (빈자료/무관/부분/인젝션/dense/합동)
 │  ├─ tools · storage · phase4 · phase6 · interview · portable · usability … 
@@ -432,8 +434,9 @@ export async function retrieve(slug: string, query: string, topK = 4): Promise<R
 - [x] **신규 인터뷰 자동 질문 제안** — `interview start` 에 4-신호 갭 분석 + "진행할까요?" 자동 질문 동봉 (`suggest=false` 로 해제)
 - [x] **인자 자동 안내(elicitation)** — 필수 인자 누락 시 번호 선택지 + `[필수]`/`[선택]` 표기로 안내 (필수 인자 있는 도구 전체). 스키마는 optional + handler 에서 검증/안내
 - [x] **인터뷰 진행 방식 선택** — 실시간(`mode=sync`·`answer`) / 파일 기반(`mode=async` → `export-sheet`(기본 HTML 폼 · 체크박스 · localStorage 자동저장 / `--format md` 옵션) → 채움 → `import-answers` JSON·MD 자동 감지)
+- [x] **구버전 답변지 재활용(v0.13)** — `import-answers` 가 ≤0.12 답변 JSON(질문 없으면 제목으로 backfill)·구버전 HTML 질문지(질문 전문 seed)도 인식
 - [x] **MCP prompts → 슬래시 명령** `/mcp__afterglow__<이름>` (8종 — 도구 전부 1:1, `afterglow:` 입력→Tab, 인자 자동완성)
-- [x] vitest 317개 + 8 도구 stdio 핸드셰이크 (액션 라우팅 · prompts 포함)
+- [x] vitest 321개 + 8 도구 stdio 핸드셰이크 (액션 라우팅 · prompts 포함)
 - [ ] per-tool ACL · Web companion · 정기 retention 자동화
 - [ ] knowledge 파일까지 확장한 일괄 암호화/복호화 도구 · 외부 STT(Tier 2) 어댑터
 

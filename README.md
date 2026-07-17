@@ -142,7 +142,7 @@ See [`server/README.md`](./server/README.md) for the full tool reference.
 | Command | Routing | Covers | Example |
 | --- | --- | --- | --- |
 | `afterglow:agent` | `action` + (`slug` …) | `list` · `status`(dashboard) · `inspect` · `edit`(fields / `open` in editor / `revalidate`) · `sign` · `resume` · `archive` · `restore` · `history` · `init` | `agent → action:sign, slug:jiyoon, signer:Jiyoon Lee` |
-| `afterglow:interview` | `action` + (`slug` `session` …) | successor-driven interviews — `start`(auto question suggestions) · `add-question` · `answer` · `gap-check` · `attach`(audio/video) · `transcribe`(WASM whisper) · `export-sheet`/`import-answers`(HTML answer sheet) · `finalize`(dual-sign) — plus the departing person's self-review as `handoff-start` · `handoff-review` · `handoff-status` · `handoff-finalize` · `handoff-abort` | `interview → slug:jiyoon, action:start, mode:async` |
+| `afterglow:interview` | `action` + (`slug` `session` …) | successor-driven interviews — `start`(auto question suggestions) · `add-question` · `answer` · `gap-check` · `attach`(audio/video) · `transcribe`(WASM whisper) · `export-sheet`/`import-answers`(HTML answer sheet; ≤0.12 legacy sheets/JSON accepted too) · `finalize`(dual-sign) — plus the departing person's self-review as `handoff-start` · `handoff-review` · `handoff-status` · `handoff-finalize` · `handoff-abort` | `interview → slug:jiyoon, action:start, mode:async` |
 | `afterglow:share` | `action` + (`slugs`/`input` …) | `export`(Ed25519-signed bundle) · `import`(signature + integrity verified; tampered bundles refused) · `verify`(read-only pre-check) | `share → action:export, slugs:jiyoon` |
 | `afterglow:admin` | `area` + `action` | `access`(call policy) · `audit`(hash-chained log + checkpoints) · `correct`(feedback · edit-answer · save-rule · record-answer · data-subject-export) · `version`(snapshots / diff / rollback / tag) · `gc`(retention, dry-run default) | `admin → area:version, action:rollback, slug:jiyoon, versionA:v3` |
 
@@ -363,7 +363,7 @@ Afterglow/
 │  │  ├─ rag.ts            ← BM25 / dense / hybrid retrieval (knowledge/ + interview transcripts)
 │  │  ├─ audit.ts          ← SHA-256 hash-chained immutable log
 │  │  └─ tools/            ← 22 tools: …18 above… + interview · export · import · verify
-│  └─ test/                ← 317 vitest + stdio handshake (covers all 8 tools + every action family)
+│  └─ test/                ← 321 vitest + stdio handshake (covers all 8 tools + every action family)
 │
 └─ docs/
    └─ design-source/       ← original claude.ai/design hand-off (JSX) — reference
@@ -415,7 +415,7 @@ npm run build
 cd server
 npm install
 npm run build
-npm test             # 317 vitest tests
+npm test             # 321 vitest tests
 npm run test:stdio   # real MCP stdio handshake (8 tools · every action family round-trip)
 npm run test:all     # unit → build → stdio
 ```
@@ -468,6 +468,7 @@ These are deliberate PoC trade-offs; closing them is a separate exercise for any
 - [x] **Auto question-suggestion on new interview** — `interview start` embeds a 4-signal gap analysis and asks "proceed with these questions?" (disable with `suggest=false`)
 - [x] **Missing-argument elicitation** — omit a required arg and the tool returns numbered choices (+ "type your own") with `[필수]`/`[선택]` tags; candidates are dynamic (existing slugs · action enums · session ids · pending question ids)
 - [x] **Choose how interviews run** — real-time (`mode=sync`, record `answer` live) vs file-based (`mode=async`): `export-sheet` writes a self-contained **HTML form** by default (checkbox UI: answered / declined / N/A / meaningless · `localStorage` auto-save — closing and reopening restores progress) or `--format md` for Markdown. The interviewee hits "Download answers (JSON)" → `import-answers` auto-detects JSON/MD and ingests it
+- [x] **Legacy sheet reuse (v0.13)** — `import-answers` also accepts artifacts from older versions: a ≤0.12 answers JSON (`{…, answers:[{id, title, declined, answer}]}`) imports directly with questions the session lacks **backfilled from their titles**, and a pre-v0.13 HTML question sheet **seeds its full question wording** into the session so the matching answers JSON then lands on the same ids — no re-interviewing after upgrading
 - [x] **Close the audit loop / record-answer** — `correct --action record-answer` archives the answer Claude composed (question · answer · confidence · sources) into `answers.log`; `correct list` shows it alongside corrections. Previously `ask` only returned a context bundle and the actual answer never came back into Afterglow
 - [x] **Mutator per-tool ACL** — `correct` · `edit` · `version` (rollback·tag·snapshot) now honour the agent's access policy via a `caller` arg (required when policy is deny-default)
 - [x] **persona.bio truncation fix** — when bio overflows 20k, the *oldest* absorbed interview blocks are dropped first (previously the new block was silently discarded). `renderInterviewBlock` now also includes the `skipped` (N/A / meaningless) section so future asks know which areas the interviewee marked off-limits
@@ -477,7 +478,7 @@ These are deliberate PoC trade-offs; closing them is a separate exercise for any
 - [x] **Status refinements (v0.10)** — per-agent staleness (`lastActivityAt`/`staleDays`, 30 d+ flagged with 🕰) and dense RAG health counter (`denseFailures`/`denseLastError`)
 - [x] **HTML answer-sheet cross-device (v0.10)** — "Save progress (file)" / "Load progress" buttons let the interviewee carry an in-progress sheet across machines
 - [x] **Slash commands** `/mcp__afterglow__<name>` — 8 MCP prompts (one per tool) — type `afterglow:` → Tab to invoke
-- [x] 317 vitest + extended stdio handshake (8 tools + prompts) — incl. a multi-angle anti-hallucination grounding suite
+- [x] 321 vitest + extended stdio handshake (8 tools + prompts) — incl. a multi-angle anti-hallucination grounding suite
 - [x] Published on npm (`@daeseoksong/afterglow-mcp`)
 - [x] **Hands-on Jupyter notebook** ([`docs/afterglow-hands-on.ipynb`](./docs/afterglow-hands-on.ipynb)) — beginner-friendly walk-through of every feature
 
