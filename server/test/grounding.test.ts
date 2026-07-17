@@ -227,19 +227,20 @@ describe('grounding · adversarial resistance', () => {
 });
 
 /* ----------------------------------------------------------------- */
-/* 7 · council — same discipline per participant                     */
+/* 7 · multi-slug ask (구 council) — same discipline per participant  */
 /* ----------------------------------------------------------------- */
 
-describe('grounding · council', () => {
+describe('grounding · multi-slug ask', () => {
   it('carries the contract and per-participant 근거 없음 on an unrelated question', async () => {
     await agent('jiyoon', '이지윤');
     await agent('jaehoon', '박재훈');
     await teach('jiyoon', '디자인 시스템 토큰.');
     await teach('jaehoon', '백엔드 결제 API.');
-    const { runCouncil } = await import('../src/tools/council.js');
-    const r = await runCouncil({ slugs: ['jiyoon', 'jaehoon'], question: '사무실 주차 정책은?' } as never);
+    const { runAsk } = await import('../src/tools/ask.js');
+    const r = await runAsk({ slugs: ['jiyoon', 'jaehoon'], question: '사무실 주차 정책은?' } as never);
     const t = r.content[0].text;
-    expect(t).toMatch(/답변 규칙 — 모든 참가자/);       // council contract
+    expect(t).toContain('합동 질문 컨텍스트');
+    expect(t).toContain('답변 규칙');                  // shared grounding contract
     expect(t).toMatch(/지어내지 마세요/);
     expect((t.match(/근거 판정: 근거 없음/g) ?? []).length).toBeGreaterThanOrEqual(2); // both refuse
   });

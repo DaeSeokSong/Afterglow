@@ -53,6 +53,7 @@ import {
   type WasmResult,
 } from '../whisper.js';
 import { assertAccessAllowed } from './acl.js';
+import { runHandoff } from './handoff.js';
 import { elicitMissing, slugCandidates, type ElicitArg, type ElicitCandidate } from './elicit.js';
 import { errorReply, safe, type ToolReply } from './types.js';
 
@@ -108,10 +109,15 @@ export const interviewShape = {
       'transcribe',
       'export-sheet',
       'import-answers',
+      'handoff-start',
+      'handoff-review',
+      'handoff-status',
+      'handoff-finalize',
+      'handoff-abort',
     ])
     .optional()
     .describe(
-      '(필수) start | add-question | answer | gap-check | suggest-questions | attach | review | annotate | status | list | inspect | finalize | abort | transcribe | export-sheet(답변지 파일 생성) | import-answers(채운 답변지 반영).',
+      '(필수) 인계자 주도: start | add-question | answer | gap-check | suggest-questions | attach | review | annotate | status | list | inspect | finalize | abort | transcribe | export-sheet(답변지 파일 생성) | import-answers(채운 답변지 반영). 본인 셀프검수(구 handoff): handoff-start | handoff-review | handoff-status | handoff-finalize | handoff-abort.',
     ),
   slug: z.string().min(1).optional().describe('(필수) 대상 에이전트 slug. 생략 시 안내합니다.'),
   session: z
@@ -198,7 +204,43 @@ export const interviewShape = {
     .optional()
     .describe('finalize 시 서명 역할. interview 는 양쪽 모두 필요, annotation 은 interviewer 만.'),
   proxy: z.boolean().optional().describe('finalize 시 부재자를 대리 서명(문자열에 표시).'),
-  signPartial: z.boolean().optional().describe('finalize 시 pending 질문이 남아도 서명 강행.'),
+  signPartial: z.boolean().optional().describe('finalize / handoff-finalize 시 pending 질문이 남아도 서명 강행.'),
+
+  /* handoff-* — 퇴사자 본인 셀프검수 (구 afterglow_handoff) */
+  questionsFile: z
+    .string()
+    .optional()
+    .describe('handoff-start 시 동료가 적어둔 .txt 파일 경로 (한 줄에 한 질문). 자동 생성과 mix 가능.'),
+  autoQuestions: z
+    .array(z.string().max(2_000))
+    .max(100)
+    .optional()
+    .describe('handoff-start 시 직접 질문 배열. file 보다 우선.'),
+  reviews: z
+    .array(
+      z
+        .object({
+          id: z.string().min(1),
+          action: z.enum(['keep', 'edit', 'decline']),
+          userAnswer: z.string().max(8_000).optional(),
+        })
+        .strict(),
+    )
+    .optional()
+    .describe('handoff-review 시 질문별 본인 판정 (keep/edit/decline + edit 이면 userAnswer).'),
+  allowFollowupInterview: z
+    .boolean()
+    .optional()
+    .describe('handoff-finalize 시 퇴사 후 대면 추가 인터뷰를 본인이 사전 허용.'),
+  allowProxyAnnotation: z
+    .boolean()
+    .optional()
+    .describe('handoff-finalize 시 본인 부재 상황의 인계자 주석(annotation)을 사전 허용.'),
+  followupScope: z
+    .string()
+    .max(2_000)
+    .optional()
+    .describe('handoff-finalize 시 추가 인터뷰 허용 범위/제한.'),
 
   /* gap-check / transcribe */
   limit: z.number().int().min(1).max(50).optional().describe('gap-check 시 분석 대상 답변 수(기본 5).'),
@@ -259,6 +301,12 @@ interface InterviewArgs {
   listModels?: boolean;
   model?: string;
   caller?: string;
+  questionsFile?: string;
+  autoQuestions?: string[];
+  reviews?: { id: string; action: 'keep' | 'edit' | 'decline'; userAnswer?: string }[];
+  allowFollowupInterview?: boolean;
+  allowProxyAnnotation?: boolean;
+  followupScope?: string;
 }
 
 /* --------------------------------------------------------------- */
@@ -269,7 +317,12 @@ const INTERVIEW_ACTIONS = [
   'start', 'add-question', 'answer', 'gap-check', 'suggest-questions', 'attach',
   'review', 'annotate', 'status', 'list', 'inspect', 'finalize', 'abort', 'transcribe',
   'export-sheet', 'import-answers',
+  'handoff-start', 'handoff-review', 'handoff-status', 'handoff-finalize', 'handoff-abort',
 ] as const;
+
+/** handoff-* actions route to the (former) afterglow_handoff implementation —
+ *  the departing person self-reviews their own agent. */
+const HANDOFF_ACTION = /^handoff-(start|review|status|finalize|abort)$/;
 
 /** Candidate provider: interview rounds of an agent (id + title). */
 async function sessionCandidates(slug?: string): Promise<ElicitCandidate[]> {
@@ -357,6 +410,25 @@ function interviewSpec(args: InterviewArgs): ElicitArg[] {
 export async function runInterview(args: InterviewArgs): Promise<ToolReply> {
   return safe(async () => {
     await assertInitialized();
+    // handoff-* → delegate to the (former afterglow_handoff) self-review flow.
+    // runHandoff carries its own elicitation, writability and ACL gates.
+    if (args.action && HANDOFF_ACTION.test(args.action)) {
+      const sub = args.action.slice('handoff-'.length) as 'start' | 'review' | 'status' | 'finalize' | 'abort';
+      return runHandoff({
+        action: sub,
+        slug: args.slug,
+        limit: args.limit,
+        questionsFile: args.questionsFile,
+        autoQuestions: args.autoQuestions,
+        reviews: args.reviews,
+        signer: args.signer,
+        signPartial: args.signPartial,
+        allowFollowupInterview: args.allowFollowupInterview,
+        allowProxyAnnotation: args.allowProxyAnnotation,
+        followupScope: args.followupScope,
+        caller: args.caller,
+      } as never);
+    }
     const guide = await elicitMissing('interview', args as unknown as Record<string, unknown>, interviewSpec(args));
     if (guide) return guide;
     try {

@@ -153,7 +153,7 @@ async function listAction(slug: string, limit: number): Promise<ToolReply> {
           type: 'text',
           text:
             `(no versions) ${slug} 에 저장된 버전이 없어요.\n` +
-            `· edit / sign / handoff / recalibrate apply 호출 시 자동으로 스냅샷됩니다.\n` +
+            `· edit / sign / handoff 호출 시 자동으로 스냅샷됩니다.\n` +
             `· 수동 스냅샷: action=snapshot --reason "…"`,
         },
       ],

@@ -1,6 +1,6 @@
 /**
  * End-to-end tool tests for the v0.1.1 additions:
- *   edit · sign · council · history · audit · recalibrate
+ *   edit · sign · history · audit
  *
  * Each test redirects ~/.claude/afterglow/ to a fresh tmp dir so the
  * filesystem is isolated.
@@ -244,78 +244,9 @@ describe('edit', () => {
 });
 
 /* --------------------------------------------------------------- */
-/* council                                                         */
+
 /* --------------------------------------------------------------- */
 
-describe('council', () => {
-  it('builds brief + writes transcript file, history + audit recorded', async () => {
-    await bootstrapAndSign('jiyoon');
-    await bootstrapAndSign('jaehoon');
-    // small per-agent knowledge so retrieval yields hits
-    const { knowledgeDir } = await import('../src/storage.js');
-    await writeFile(
-      join(knowledgeDir('jiyoon'), 'note.md'),
-      '온보딩 step 2 설명을 절반으로 줄여서 step 3 이탈이 9%로 떨어졌어요.',
-      'utf8',
-    );
-    await writeFile(
-      join(knowledgeDir('jaehoon'), 'pay.md'),
-      '결제 폼 변경은 백엔드에 영향이 없습니다. 3DS만 분리 유지.',
-      'utf8',
-    );
-
-    const { runCouncil } = await import('../src/tools/council.js');
-    const { councilsDir } = await import('../src/storage.js');
-    const r = await runCouncil({
-      slugs: ['jiyoon', 'jaehoon'],
-      question: '온보딩 개선이 결제 폼에 영향 줄까요?',
-      topic: 'pay-onboarding',
-    });
-    expect(r.isError).toBeUndefined();
-    const text = r.content[0].text;
-    expect(text).toContain('Council Brief');
-    expect(text).toContain('jiyoon');
-    expect(text).toContain('jaehoon');
-    expect(text).toContain('회의록');
-
-    // transcript file should exist in councils/
-    const files = (await import('node:fs/promises')).readdir(councilsDir());
-    const list = await files;
-    expect(list.some((f) => f.includes('pay-onboarding'))).toBe(true);
-
-    const { readHistory } = await import('../src/storage.js');
-    const hj = await readHistory('jiyoon');
-    expect(hj.some((e) => e.message.startsWith('council'))).toBe(true);
-
-    const { readAll } = await import('../src/audit.js');
-    const auditRecords = await readAll();
-    expect(auditRecords.some((rec) => rec.tool === 'afterglow_council')).toBe(true);
-  });
-
-  it('rejects duplicate slugs', async () => {
-    await bootstrapAndSign('jiyoon');
-    const { runCouncil } = await import('../src/tools/council.js');
-    const r = await runCouncil({ slugs: ['jiyoon', 'jiyoon'], question: '?' });
-    expect(r.isError).toBe(true);
-    expect(r.content[0].text).toMatch(/중복/);
-  });
-
-  it('rejects when one participant is draft (not signed)', async () => {
-    await bootstrapAndSign('jiyoon');
-    await bootstrap('jaehoon'); // draft
-    const { runCouncil } = await import('../src/tools/council.js');
-    const r = await runCouncil({ slugs: ['jiyoon', 'jaehoon'], question: '?' });
-    expect(r.isError).toBe(true);
-    expect(r.content[0].text).toMatch(/draft|sign/i);
-  });
-
-  it('rejects when a participant does not exist', async () => {
-    await bootstrapAndSign('jiyoon');
-    const { runCouncil } = await import('../src/tools/council.js');
-    const r = await runCouncil({ slugs: ['jiyoon', 'ghost'], question: '?' });
-    expect(r.isError).toBe(true);
-  });
-});
 
 /* --------------------------------------------------------------- */
 /* history                                                         */
@@ -450,64 +381,6 @@ describe('audit · hash chain', () => {
 /* recalibrate                                                     */
 /* --------------------------------------------------------------- */
 
-describe('recalibrate', () => {
-  it('refuses below min sample', async () => {
-    await bootstrapAndSign('jiyoon');
-    const { runRecalibrate } = await import('../src/tools/recalibrate.js');
-    const r = await runRecalibrate({ slug: 'jiyoon' });
-    expect(r.content[0].text).toMatch(/표본 부족/);
-  });
-
-  it('suggests raising confidenceFloor when 👎 / refusals are high (dry-run by default)', async () => {
-    await bootstrapAndSign('jiyoon');
-    const { historyLogPath, readPersona } = await import('../src/storage.js');
-    // Synthesize a noisy ask history: many asks, many 👎 / refusals
-    const lines: string[] = [];
-    for (let i = 0; i < 15; i++) lines.push(`2026-02-${(i + 1).toString().padStart(2, '0')}T00:00:00.000Z  ask: "q${i}" 👎`);
-    for (let i = 0; i < 6; i++) lines.push(`2026-03-${(i + 1).toString().padStart(2, '0')}T00:00:00.000Z  ask: "q" 모른다`);
-    await writeFile(historyLogPath('jiyoon'), lines.join('\n') + '\n', 'utf8');
-
-    const before = (await readPersona('jiyoon')).confidenceFloor;
-    const { runRecalibrate } = await import('../src/tools/recalibrate.js');
-    const dry = await runRecalibrate({ slug: 'jiyoon' });
-    expect(dry.isError).toBeUndefined();
-    expect(dry.content[0].text).toContain('confidenceFloor');
-    expect(dry.content[0].text).toContain('dry-run');
-    expect((await readPersona('jiyoon')).confidenceFloor).toBe(before); // unchanged
-
-    const applied = await runRecalibrate({ slug: 'jiyoon', apply: true });
-    expect(applied.isError).toBeUndefined();
-    expect((await readPersona('jiyoon')).confidenceFloor).toBeGreaterThan(before);
-  });
-
-  it('raises peerAskThreshold when many low-conf calls but no peer-asks', async () => {
-    await bootstrapAndSign('jiyoon');
-    const { historyLogPath, readPersona } = await import('../src/storage.js');
-    const lines: string[] = [];
-    for (let i = 0; i < 15; i++) {
-      lines.push(`2026-02-${(i + 1).toString().padStart(2, '0')}T00:00:00.000Z  ask: "q${i}" (low-conf)`);
-    }
-    await writeFile(historyLogPath('jiyoon'), lines.join('\n') + '\n', 'utf8');
-    const before = (await readPersona('jiyoon')).peerAskThreshold;
-    const { runRecalibrate } = await import('../src/tools/recalibrate.js');
-    const r = await runRecalibrate({ slug: 'jiyoon', apply: true });
-    expect(r.isError).toBeUndefined();
-    const after = (await readPersona('jiyoon')).peerAskThreshold;
-    expect(after).toBeGreaterThan(before);
-  });
-
-  it('no-op when history is balanced', async () => {
-    await bootstrapAndSign('jiyoon');
-    const { historyLogPath } = await import('../src/storage.js');
-    const lines = Array.from({ length: 15 }, (_, i) =>
-      `2026-02-${(i + 1).toString().padStart(2, '0')}T00:00:00.000Z  ask: "q${i}" (3 chunks, confidence 88%)`,
-    );
-    await writeFile(historyLogPath('jiyoon'), lines.join('\n') + '\n', 'utf8');
-    const { runRecalibrate } = await import('../src/tools/recalibrate.js');
-    const r = await runRecalibrate({ slug: 'jiyoon' });
-    expect(r.content[0].text).toMatch(/제안 없음/);
-  });
-});
 
 /* --------------------------------------------------------------- */
 /* RAG — TF-IDF                                                    */

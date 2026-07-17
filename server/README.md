@@ -22,7 +22,7 @@
   <a href="#-one-line-install"><b>One-line install</b></a> ·
   <a href="#-30-second-start">30-second start</a> ·
   <a href="#-how-it-works">How it works</a> ·
-  <a href="#-the-26-tools">26 tools</a> ·
+  <a href="#-the-8-tools">8 tools</a> ·
   <a href="#-environment-variables">Env vars</a> ·
   <a href="https://github.com/DaeSeokSong/Afterglow">GitHub →</a>
 </p>
@@ -79,32 +79,30 @@ RAG ranks with **BM25** by default (offline, zero-dependency, Korean particle-st
 
 ### 🛑 Grounding — no made-up answers (always on)
 
-Every `ask`/`council` bundle leads with a hard **grounding contract**: the persona may only state facts that trace to a cited source ([소개] persona bio / [n] retrieved chunk / [보정] correction), and any claim it can't cite is forbidden. A backend-independent gate measures how much of the *question's* vocabulary actually appears in the provided sources and stamps a verdict — **근거 없음 / 매우 부족 / 부분 / 충분** — with the missing key terms named. On `none`/`weak` the only sanctioned reply is "that isn't in the provided materials." Confidence is derived from that coverage (replacing an old heuristic that reported ~100% for any match), so a thin or off-topic match no longer looks certain. The contract is restated at the end of the bundle (recency) and adversarial text inside a chunk or the question is fenced as data, so it can't override the rules.
+Every `ask` bundle (single or joint) leads with a hard **grounding contract**: the persona may only state facts that trace to a cited source ([소개] persona bio / [n] retrieved chunk / [보정] correction), and any claim it can't cite is forbidden. A backend-independent gate measures how much of the *question's* vocabulary actually appears in the provided sources and stamps a verdict — **근거 없음 / 매우 부족 / 부분 / 충분** — with the missing key terms named. On `none`/`weak` the only sanctioned reply is "that isn't in the provided materials." Confidence is derived from that coverage (replacing an old heuristic that reported ~100% for any match), so a thin or off-topic match no longer looks certain. The contract is restated at the end of the bundle (recency) and adversarial text inside a chunk or the question is fenced as data, so it can't override the rules.
 
-## 🛠 The 26 tools
+## 🛠 The 8 tools
 
-Grouped by what you'll reach for. The root [README](../README.md) has the full per-command argument tables and examples.
+Four you'll use every day, four routers for everything else. The root [README](../README.md) has the full argument tables, examples, and a ≤0.12→0.13 migration map.
 
-**Start here** — `guide` (orientation) · `create` (make an agent; `--signer` activates) · `learn` (add knowledge) · `ask` (query the persona)
+**Core** — `guide` (state-aware orientation) · `create` (make an agent; `--signer` activates) · `learn` (add knowledge: paste / file / folder / URL) · `ask` (query the persona — pass `slugs:[a,b]` for a joint multi-agent session)
 
-**Setup / lifecycle** — `init` (usually unneeded; `create` auto-inits) · `sign` (consent → active) · `resume` (re-activate) · `archive` (archive/restore/list)
+**`agent`** (`action`) — `list` · `status` (global dashboard + staleness + RAG/whisper posture) · `inspect` · `edit` (fields / open in `$EDITOR` / revalidate) · `sign` · `resume` · `archive` · `restore` · `history` · `init`
 
-**Daily** — `list` · `status` (global dashboard + staleness + RAG/whisper posture) · `inspect` · `edit` (fields / open in `$EDITOR` / revalidate) · `history`
+**`interview`** (`action`) — successor-driven multi-round interviews: `start` (auto question suggestions) · `add-question` · `answer` · `gap-check` · `attach` (audio/video) · `transcribe` (WASM whisper) · `export-sheet` / `import-answers` (HTML answer sheet with auto-save) · `finalize` (dual signature) — plus the departing person's self-review as `handoff-start` · `handoff-review` · `handoff-status` · `handoff-finalize` · `handoff-abort`
 
-**Trust / governance** — `correct` (feedback · edit-answer · save-rule · **record-answer** · **data-subject-export** · list) · `recalibrate` (confidence) · `access` (per-agent call policy) · `audit` (hash-chained log + checkpoints) · `version` (snapshots / diff / rollback / tag) · `gc` (retention / GDPR purge)
+**`share`** (`action`) — `export` (bundle + **Ed25519 signature**) · `import` (verifies signature + integrity; refuses tampered bundles) · `verify` (read-only pre-flight)
 
-**Interview / meeting** — `handoff` (departing person self-reviews their own agent) · `interview` (successor-driven multi-round; real-time **or** an HTML/Markdown answer-sheet; gap detection; audio/video + transcription) · `council` (multi-agent meeting) · `council_summary`
+**`admin`** (`area` + `action`) — `access` (per-agent call policy) · `audit` (hash-chained log + checkpoints) · `correct` (feedback · edit-answer · save-rule · **record-answer** · **data-subject-export** · list) · `version` (snapshots / diff / rollback / tag) · `gc` (retention / GDPR purge, dry-run by default)
 
-**Hot-plug** — `export` (bundle + **Ed25519 signature**) · `import` (verifies signature + integrity; refuses tampered bundles) · `verify` (read-only pre-flight)
-
-Mutating tools honour the agent's `access` policy when a `caller` (`user:` / `role:` / `team:`) is supplied.
+Omit a required `action`/`area` and the tool replies with a numbered menu instead of an error. Mutating actions honour the agent's `access` policy when a `caller` (`user:` / `role:` / `team:`) is supplied.
 
 ## ⚙ Environment variables
 
 | Var | Default | Purpose |
 | --- | --- | --- |
 | `AFTERGLOW_ROOT` | `~/.claude/afterglow` | Data root. Point at a temp dir to isolate tests/dev. |
-| `AFTERGLOW_ALLOW_DRAFT` | unset | `1` bypasses the active-gate on `ask`/`council` (debug). |
+| `AFTERGLOW_ALLOW_DRAFT` | unset | `1` bypasses the active-gate on `ask` (debug). |
 | `AFTERGLOW_RAG_BACKEND` | `lexical` | `dense` enables the embedding backend (needs `AFTERGLOW_EMBED_ENDPOINT`; falls back to lexical on failure). |
 | `AFTERGLOW_RAG_HYBRID` | on (when dense) | `off` to use pure dense; default fuses dense + lexical via **RRF**. |
 | `AFTERGLOW_EMBED_ENDPOINT` / `_KEY` / `_MODEL` | unset / unset / `text-embedding-3-small` | OpenAI-compatible `/embeddings` endpoint, key, model. |
@@ -121,7 +119,6 @@ Mutating tools honour the agent's `access` policy when a `caller` (`user:` / `ro
 ~/.claude/afterglow/
 ├─ config.yml · registry.json
 ├─ keys/ed25519.json            ← local signing keypair (created on first export)
-├─ councils/                    ← council + peer-ask transcripts
 └─ agents/<slug>/
    ├─ persona.json · system-prompt.md · consent.md
    ├─ access.json · provenance.json · handoff.json · followup.json
@@ -139,8 +136,8 @@ git clone https://github.com/DaeSeokSong/Afterglow.git
 cd Afterglow/server
 npm install
 npm run build              # tsc → dist/
-npm test                   # vitest (323 tests)
-npm run test:stdio         # real MCP stdio handshake (all 26 tools, happy-path + grounding + feature round-trips)
+npm test                   # vitest (317 tests)
+npm run test:stdio         # real MCP stdio handshake (all 8 tools, every action family + grounding round-trips)
 npm run test:all           # typecheck → build → unit → stdio
 ```
 

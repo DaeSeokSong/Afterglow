@@ -409,22 +409,15 @@ describe('correct · feedback / edit / rule', () => {
 /* --------------------------------------------------------------- */
 
 describe('auto-snapshot integration', () => {
-  it('sign + edit + recalibrate apply all create version snapshots', async () => {
+  it('sign + edit + manual snapshot all create version snapshots', async () => {
     await bootstrap('jiyoon');
     const { runSign } = await import('../src/tools/sign.js');
     const { runEdit } = await import('../src/tools/edit.js');
     const { runVersion } = await import('../src/tools/version.js');
-    const { historyLogPath } = await import('../src/storage.js');
-    const { runRecalibrate } = await import('../src/tools/recalibrate.js');
 
     await runSign({ slug: 'jiyoon', signer: '본인' });    // +1 snap
     await runEdit({ slug: 'jiyoon', bio: 'b' });           // +1 snap
-
-    // Manufacture enough history for recalibrate to act
-    const lines: string[] = [];
-    for (let i = 0; i < 15; i++) lines.push(`2026-02-${String(i + 1).padStart(2, '0')}T00:00:00.000Z  ask: "q${i}" (3 chunks, confidence 30%, low-conf) 👎`);
-    await writeFile(historyLogPath('jiyoon'), lines.join('\n') + '\n', 'utf8');
-    await runRecalibrate({ slug: 'jiyoon', apply: true });  // +1 snap
+    await runVersion({ action: 'snapshot', slug: 'jiyoon', reason: 'manual' }); // +1 snap
 
     const list = await runVersion({ action: 'list', slug: 'jiyoon' });
     const ids = [...list.content[0].text.matchAll(/v(\d+)/g)].map((m) => Number(m[1]));
