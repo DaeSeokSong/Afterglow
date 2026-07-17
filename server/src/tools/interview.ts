@@ -53,6 +53,7 @@ import {
   type WasmResult,
 } from '../whisper.js';
 import { assertAccessAllowed } from './acl.js';
+import { runHandoff } from './handoff.js';
 import { elicitMissing, slugCandidates, type ElicitArg, type ElicitCandidate } from './elicit.js';
 import { errorReply, safe, type ToolReply } from './types.js';
 
@@ -108,10 +109,15 @@ export const interviewShape = {
       'transcribe',
       'export-sheet',
       'import-answers',
+      'handoff-start',
+      'handoff-review',
+      'handoff-status',
+      'handoff-finalize',
+      'handoff-abort',
     ])
     .optional()
     .describe(
-      '(필수) start | add-question | answer | gap-check | suggest-questions | attach | review | annotate | status | list | inspect | finalize | abort | transcribe | export-sheet(답변지 파일 생성) | import-answers(채운 답변지 반영).',
+      '(필수) 인계자 주도: start | add-question | answer | gap-check | suggest-questions | attach | review | annotate | status | list | inspect | finalize | abort | transcribe | export-sheet(답변지 파일 생성) | import-answers(채운 답변지 반영). 본인 셀프검수(구 handoff): handoff-start | handoff-review | handoff-status | handoff-finalize | handoff-abort.',
     ),
   slug: z.string().min(1).optional().describe('(필수) 대상 에이전트 slug. 생략 시 안내합니다.'),
   session: z
@@ -144,7 +150,7 @@ export const interviewShape = {
     .string()
     .max(1_000)
     .optional()
-    .describe('export-sheet 시 답변지 출력 경로(생략 시 회차 폴더에 자동 생성). import-answers 시 채워서 돌려받은 답변지 경로(필수).'),
+    .describe('export-sheet 시 답변지 출력 경로(생략 시 회차 폴더에 자동 생성). import-answers 시 채워서 돌려받은 답변지 경로(필수) — 현재 JSON/MD 는 물론 구버전(≤0.12) 답변 JSON·HTML 질문지도 인식.'),
   format: z
     .enum(['html', 'md'])
     .optional()
@@ -198,7 +204,43 @@ export const interviewShape = {
     .optional()
     .describe('finalize 시 서명 역할. interview 는 양쪽 모두 필요, annotation 은 interviewer 만.'),
   proxy: z.boolean().optional().describe('finalize 시 부재자를 대리 서명(문자열에 표시).'),
-  signPartial: z.boolean().optional().describe('finalize 시 pending 질문이 남아도 서명 강행.'),
+  signPartial: z.boolean().optional().describe('finalize / handoff-finalize 시 pending 질문이 남아도 서명 강행.'),
+
+  /* handoff-* — 퇴사자 본인 셀프검수 (구 afterglow_handoff) */
+  questionsFile: z
+    .string()
+    .optional()
+    .describe('handoff-start 시 동료가 적어둔 .txt 파일 경로 (한 줄에 한 질문). 자동 생성과 mix 가능.'),
+  autoQuestions: z
+    .array(z.string().max(2_000))
+    .max(100)
+    .optional()
+    .describe('handoff-start 시 직접 질문 배열. file 보다 우선.'),
+  reviews: z
+    .array(
+      z
+        .object({
+          id: z.string().min(1),
+          action: z.enum(['keep', 'edit', 'decline']),
+          userAnswer: z.string().max(8_000).optional(),
+        })
+        .strict(),
+    )
+    .optional()
+    .describe('handoff-review 시 질문별 본인 판정 (keep/edit/decline + edit 이면 userAnswer).'),
+  allowFollowupInterview: z
+    .boolean()
+    .optional()
+    .describe('handoff-finalize 시 퇴사 후 대면 추가 인터뷰를 본인이 사전 허용.'),
+  allowProxyAnnotation: z
+    .boolean()
+    .optional()
+    .describe('handoff-finalize 시 본인 부재 상황의 인계자 주석(annotation)을 사전 허용.'),
+  followupScope: z
+    .string()
+    .max(2_000)
+    .optional()
+    .describe('handoff-finalize 시 추가 인터뷰 허용 범위/제한.'),
 
   /* gap-check / transcribe */
   limit: z.number().int().min(1).max(50).optional().describe('gap-check 시 분석 대상 답변 수(기본 5).'),
@@ -259,6 +301,12 @@ interface InterviewArgs {
   listModels?: boolean;
   model?: string;
   caller?: string;
+  questionsFile?: string;
+  autoQuestions?: string[];
+  reviews?: { id: string; action: 'keep' | 'edit' | 'decline'; userAnswer?: string }[];
+  allowFollowupInterview?: boolean;
+  allowProxyAnnotation?: boolean;
+  followupScope?: string;
 }
 
 /* --------------------------------------------------------------- */
@@ -269,7 +317,12 @@ const INTERVIEW_ACTIONS = [
   'start', 'add-question', 'answer', 'gap-check', 'suggest-questions', 'attach',
   'review', 'annotate', 'status', 'list', 'inspect', 'finalize', 'abort', 'transcribe',
   'export-sheet', 'import-answers',
+  'handoff-start', 'handoff-review', 'handoff-status', 'handoff-finalize', 'handoff-abort',
 ] as const;
+
+/** handoff-* actions route to the (former) afterglow_handoff implementation —
+ *  the departing person self-reviews their own agent. */
+const HANDOFF_ACTION = /^handoff-(start|review|status|finalize|abort)$/;
 
 /** Candidate provider: interview rounds of an agent (id + title). */
 async function sessionCandidates(slug?: string): Promise<ElicitCandidate[]> {
@@ -357,6 +410,25 @@ function interviewSpec(args: InterviewArgs): ElicitArg[] {
 export async function runInterview(args: InterviewArgs): Promise<ToolReply> {
   return safe(async () => {
     await assertInitialized();
+    // handoff-* → delegate to the (former afterglow_handoff) self-review flow.
+    // runHandoff carries its own elicitation, writability and ACL gates.
+    if (args.action && HANDOFF_ACTION.test(args.action)) {
+      const sub = args.action.slice('handoff-'.length) as 'start' | 'review' | 'status' | 'finalize' | 'abort';
+      return runHandoff({
+        action: sub,
+        slug: args.slug,
+        limit: args.limit,
+        questionsFile: args.questionsFile,
+        autoQuestions: args.autoQuestions,
+        reviews: args.reviews,
+        signer: args.signer,
+        signPartial: args.signPartial,
+        allowFollowupInterview: args.allowFollowupInterview,
+        allowProxyAnnotation: args.allowProxyAnnotation,
+        followupScope: args.followupScope,
+        caller: args.caller,
+      } as never);
+    }
     const guide = await elicitMissing('interview', args as unknown as Record<string, unknown>, interviewSpec(args));
     if (guide) return guide;
     try {
@@ -1785,7 +1857,16 @@ interface NormalizedEntry {
   kind: AnswerKind;
   answer?: string;
   note?: string;
+  /** Question text carried by the sheet itself (legacy formats). When the id
+   *  isn't in the session, this lets the importer backfill the question
+   *  instead of dropping the answer as "unknown". */
+  question?: string;
 }
+
+/** Per-import ceiling on questions created from a sheet that carries its own
+ *  question text — bounds how much a malicious/corrupt file can inflate a
+ *  session. */
+const MAX_BACKFILL_QUESTIONS = 200;
 
 /** Parse the legacy plain-Markdown sheet (`=== <id>` blocks) into normalized
  *  entries. `(declined)` becomes a declined entry; everything else with a
@@ -1816,46 +1897,131 @@ function parseMdSheet(text: string): NormalizedEntry[] {
 }
 
 /** Parse a JSON answer sheet emitted by the HTML form's "Download JSON"
- *  button. Validates the envelope and the per-answer `kind`. */
-function parseJsonSheet(text: string): NormalizedEntry[] | { error: string } {
+ *  button — current envelope (afterglowAnswerSheet:1) or the pre-v0.13
+ *  legacy export ({session, answers:[{id, num, title, declined, answer}]}).
+ *  Legacy entries carry their `title` as backfill question text so answers
+ *  survive even when the session doesn't have those question ids. */
+function parseJsonSheet(text: string): { entries: NormalizedEntry[]; legacy: boolean } | { error: string } {
   let parsed: unknown;
   try { parsed = JSON.parse(text); } catch (e) { return { error: `JSON 파싱 실패: ${(e as Error).message}` }; }
   const env = parsed as { afterglowAnswerSheet?: number; answers?: unknown };
-  if (!env || env.afterglowAnswerSheet !== 1 || !Array.isArray(env.answers)) {
-    return { error: 'JSON 형식이 다릅니다 (afterglowAnswerSheet:1 / answers[] 가 필요).' };
+  if (!env || !Array.isArray(env.answers)) {
+    return { error: 'JSON 형식이 다릅니다 (answers[] 가 필요).' };
+  }
+
+  if (env.afterglowAnswerSheet === 1) {
+    const out: NormalizedEntry[] = [];
+    for (const a of env.answers as Array<Record<string, unknown>>) {
+      const id = String(a.id ?? '').trim();
+      const kind = String(a.kind ?? '').trim() as AnswerKind;
+      if (!id || !['answered', 'declined', 'n/a', 'meaningless', 'skipped'].includes(kind)) continue;
+      const answer = typeof a.answer === 'string' ? a.answer : undefined;
+      const note = typeof a.note === 'string' ? a.note : undefined;
+      if (kind === 'answered') {
+        if (!answer || answer.trim().length === 0) continue; // empty answer → skip
+        out.push({ id, kind, answer: answer.trim() });
+      } else {
+        out.push({ id, kind, note });
+      }
+    }
+    return { entries: out, legacy: false };
+  }
+
+  // Legacy shape: no envelope marker, per-answer boolean `declined` (+ num/title).
+  const rows = env.answers as Array<Record<string, unknown>>;
+  const looksLegacy = rows.length > 0 && rows.every(
+    (a) => typeof a === 'object' && a !== null && typeof a.id === 'string' && typeof a.declined === 'boolean' && !('kind' in a),
+  );
+  if (!looksLegacy) {
+    return { error: 'JSON 형식이 다릅니다 (afterglowAnswerSheet:1 형식 또는 구버전 {declined, answer} 형식이어야 합니다).' };
   }
   const out: NormalizedEntry[] = [];
-  for (const a of env.answers as Array<Record<string, unknown>>) {
-    const id = String(a.id ?? '').trim();
-    const kind = String(a.kind ?? '').trim() as AnswerKind;
-    if (!id || !['answered', 'declined', 'n/a', 'meaningless', 'skipped'].includes(kind)) continue;
-    const answer = typeof a.answer === 'string' ? a.answer : undefined;
-    const note = typeof a.note === 'string' ? a.note : undefined;
-    if (kind === 'answered') {
-      if (!answer || answer.trim().length === 0) continue; // empty answer → skip
-      out.push({ id, kind, answer: answer.trim() });
-    } else {
-      out.push({ id, kind, note });
+  for (const a of rows) {
+    const id = String(a.id).trim();
+    if (!id) continue;
+    const title = typeof a.title === 'string' ? a.title.trim() : '';
+    const question = title.length > 0 ? title : undefined;
+    if (a.declined === true) {
+      out.push({ id, kind: 'declined', question });
+      continue;
     }
+    const answer = typeof a.answer === 'string' ? a.answer.trim() : '';
+    if (answer.length === 0) continue; // unanswered → leave pending
+    out.push({ id, kind: 'answered', answer, question });
+  }
+  return { entries: out, legacy: true };
+}
+
+/**
+ * Extract the question manifest from a pre-v0.13 HTML answer sheet — those
+ * files embed `const QUESTIONS = [{id, num, title, body}, …]` where `body`
+ * is a backtick template literal of HTML. Used to SEED a session's questions
+ * (full wording included) so a matching legacy answers JSON can then land on
+ * the same ids. Returns [] when the page isn't that shape.
+ */
+function parseLegacyHtmlQuestions(raw: string): Array<{ id: string; question: string }> {
+  if (!raw.includes('const QUESTIONS')) return [];
+  const out: Array<{ id: string; question: string }> = [];
+  const seen = new Set<string>();
+  const re = /\{\s*id:\s*"([^"]+)"\s*,\s*num:\s*"([^"]*)"\s*,\s*title:\s*"([^"]*)"\s*,\s*body:\s*`([\s\S]*?)`\s*\}/g;
+  for (const m of raw.matchAll(re)) {
+    const id = m[1].trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const title = m[3].trim();
+    const body = htmlFragmentToPlain(m[4]);
+    const question = (body.length > 0 ? (title.length > 0 ? `${title} — ${body}` : body) : title).slice(0, 2_000);
+    if (question.length === 0) continue;
+    out.push({ id, question });
   }
   return out;
 }
 
-/** Apply normalized entries to the session. Returns per-bucket id lists. */
+/** Flatten a small HTML fragment (the legacy sheet's question body) to plain
+ *  text: <br> → space, tags stripped, basic entities decoded. */
+function htmlFragmentToPlain(fragment: string): string {
+  return fragment
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** Apply normalized entries to the session. Returns per-bucket id lists.
+ *  Entries that carry their own `question` text (legacy sheets) and don't
+ *  match an existing id are BACKFILLED — the question is created and the
+ *  answer applied in one step, so pre-v0.13 exports stay usable. */
 function applyEntries(
   session: InterviewSession,
   entries: NormalizedEntry[],
   source: NonNullable<InterviewQuestion['answerSource']>,
-): { applied: string[]; declined: string[]; skipped: string[]; alreadyNonPending: string[]; unknown: string[] } {
+): { applied: string[]; declined: string[]; skipped: string[]; alreadyNonPending: string[]; unknown: string[]; backfilled: string[] } {
   const applied: string[] = [];
   const declined: string[] = [];
   const skipped: string[] = [];
   const alreadyNonPending: string[] = [];
   const unknown: string[] = [];
+  const backfilled: string[] = [];
   const now = new Date().toISOString();
   for (const e of entries) {
-    const q = session.questions.find((x) => x.id === e.id);
-    if (!q) { unknown.push(e.id); continue; }
+    let q = session.questions.find((x) => x.id === e.id);
+    if (!q) {
+      if (!e.question || e.question.trim().length === 0) { unknown.push(e.id); continue; }
+      if (backfilled.length >= MAX_BACKFILL_QUESTIONS) { unknown.push(`${e.id}(backfill 한도 초과)`); continue; }
+      q = {
+        id: e.id.slice(0, 128),
+        question: e.question.trim().slice(0, 2_000),
+        status: 'pending',
+        askedAt: now,
+      };
+      session.questions.push(q);
+      backfilled.push(e.id);
+    }
     if (q.status !== 'pending') { alreadyNonPending.push(`${e.id}(이미 ${q.status})`); continue; }
     if (e.kind === 'answered') {
       if (!e.answer || e.answer.trim().length === 0) { skipped.push(`${e.id}(빈칸)`); continue; }
@@ -1877,7 +2043,7 @@ function applyEntries(
       skipped.push(`${e.id}(${e.kind})`);
     }
   }
-  return { applied, declined, skipped, alreadyNonPending, unknown };
+  return { applied, declined, skipped, alreadyNonPending, unknown, backfilled };
 }
 
 /**
@@ -1903,13 +2069,49 @@ async function importAnswers(args: InterviewArgs): Promise<ToolReply> {
     return errorReply(`답변지를 읽을 수 없습니다: ${sanitisePromptLine((e as Error).message, 300)}`);
   }
 
+  // Legacy question sheet (pre-v0.13 HTML): no answers live in the file
+  // (they stayed in the interviewee's localStorage) — but the full question
+  // wording does. Seed those questions as pending so the matching legacy
+  // answers JSON can be imported right after onto the same ids.
+  const looksHtml = /\.html?$/i.test(resolved) || /<html[\s>]/i.test(raw.slice(0, 2_000));
+  if (looksHtml) {
+    const qs = parseLegacyHtmlQuestions(raw);
+    if (qs.length === 0) {
+      return errorReply('HTML 에서 구버전 질문지(const QUESTIONS = […])를 찾지 못했습니다. 답변 반영은 "답변 JSON" 파일로 해주세요.');
+    }
+    const now = new Date().toISOString();
+    const seeded: string[] = [];
+    const existing: string[] = [];
+    for (const q of qs) {
+      if (session.questions.some((x) => x.id === q.id)) { existing.push(q.id); continue; }
+      if (session.questions.length >= 500) break;
+      session.questions.push({ id: q.id.slice(0, 128), question: q.question, status: 'pending', askedAt: now });
+      seeded.push(q.id);
+    }
+    await writeInterviewSession(args.slug, session);
+    await appendHistory(args.slug, `interview import-answers #${session.sessionId} (legacy html sheet: +${seeded.length} questions seeded)`);
+    await auditAppend({
+      tool: 'afterglow_interview',
+      slug: args.slug,
+      summary: `interview import-answers · ${session.sessionId} · legacy-html seed +${seeded.length}`,
+      meta: { sessionId: session.sessionId, format: 'legacy-html', seeded: seeded.length, alreadyPresent: existing.length },
+    });
+    const out: string[] = [];
+    out.push(`✦ 구버전 HTML 질문지 인식 (#${session.sessionId}): 질문 ${seeded.length}개 등록${existing.length > 0 ? ` · 이미 있던 ${existing.length}개 건너뜀` : ''}.`);
+    out.push('  이 파일엔 답변이 들어있지 않습니다 (구버전 답변은 브라우저 저장 → JSON 내보내기 방식).');
+    out.push(`  이어서: action=import-answers --session ${session.sessionId} --sheet <답변 JSON> 으로 답변을 반영하세요.`);
+    return { content: [{ type: 'text', text: out.join('\n') }] };
+  }
+
   // Format auto-detect: .json extension OR content starts with `{`.
   const isJson = /\.json$/i.test(resolved) || raw.trimStart().startsWith('{');
   let entries: NormalizedEntry[];
+  let legacyJson = false;
   if (isJson) {
     const parsed = parseJsonSheet(raw);
-    if (!Array.isArray(parsed)) return errorReply(`답변지 거부: ${parsed.error}`);
-    entries = parsed;
+    if ('error' in parsed) return errorReply(`답변지 거부: ${parsed.error}`);
+    entries = parsed.entries;
+    legacyJson = parsed.legacy;
   } else {
     entries = parseMdSheet(raw);
   }
@@ -1920,25 +2122,28 @@ async function importAnswers(args: InterviewArgs): Promise<ToolReply> {
   }
 
   const source = args.source ?? 'self-typed';
-  const { applied, declined, skipped, alreadyNonPending, unknown } = applyEntries(session, entries, source);
+  const { applied, declined, skipped, alreadyNonPending, unknown, backfilled } = applyEntries(session, entries, source);
 
   await writeInterviewSession(args.slug, session);
+  const fmt = isJson ? (legacyJson ? 'legacy-json' : 'json') : 'md';
   await appendHistory(
     args.slug,
-    `interview import-answers #${session.sessionId} (${isJson ? 'json' : 'md'}, applied ${applied.length}, declined ${declined.length}, skipped ${skipped.length}, unknown ${unknown.length})`,
+    `interview import-answers #${session.sessionId} (${fmt}, applied ${applied.length}, declined ${declined.length}, skipped ${skipped.length}, backfilled ${backfilled.length}, unknown ${unknown.length})`,
   );
   await auditAppend({
     tool: 'afterglow_interview',
     slug: args.slug,
-    summary: `interview import-answers · ${session.sessionId} · +${applied.length} · ${isJson ? 'json' : 'md'}`,
-    meta: { sessionId: session.sessionId, format: isJson ? 'json' : 'md', applied: applied.length, declined: declined.length, skipped: skipped.length, unknown: unknown.length, source },
+    summary: `interview import-answers · ${session.sessionId} · +${applied.length} · ${fmt}`,
+    meta: { sessionId: session.sessionId, format: fmt, applied: applied.length, declined: declined.length, skipped: skipped.length, backfilled: backfilled.length, unknown: unknown.length, source },
   });
 
   const t = tallyQuestions(session.questions);
   const out: string[] = [];
-  out.push(`✦ 답변지 반영 (#${session.sessionId}, ${isJson ? 'json' : 'md'}): 적용 ${applied.length} · 거절 ${declined.length} · 건너뜀 ${skipped.length + alreadyNonPending.length} · 미매칭 ${unknown.length}`);
+  out.push(`✦ 답변지 반영 (#${session.sessionId}, ${fmt}): 적용 ${applied.length} · 거절 ${declined.length} · 건너뜀 ${skipped.length + alreadyNonPending.length} · 미매칭 ${unknown.length}`);
   out.push(`  진행: pending ${t.pending} · answered ${t.answered} · declined ${t.declined} · skipped ${t.skipped} (출처 ${source})`);
-  if (unknown.length > 0) out.push(`  ⚠ 미매칭 id (이 회차에 없음): ${unknown.slice(0, 10).map((s) => sanitisePromptLine(s, 40)).join(', ')}`);
+  if (legacyJson) out.push(`  ↳ 구버전(≤0.12) 답변 JSON 형식을 감지해 변환했습니다.`);
+  if (backfilled.length > 0) out.push(`  ↳ 회차에 없던 질문 ${backfilled.length}개를 답변지의 질문 제목으로 자동 등록 후 반영했습니다.`);
+  if (unknown.length > 0) out.push(`  ⚠ 미매칭 id (이 회차에 없고 질문 텍스트도 없음): ${unknown.slice(0, 10).map((s) => sanitisePromptLine(s, 40)).join(', ')}`);
   out.push('');
   if (t.pending > 0) {
     out.push(`  남은 pending ${t.pending}개 — 추가 답변지(export-sheet) 또는 직접 action=answer.`);

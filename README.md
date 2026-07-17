@@ -80,7 +80,7 @@ claude /afterglow ask    jiyoon "Onboarding step-3 drop-off — how did you cut 
       </td>
       <td>
         <a href="https://www.npmjs.com/package/@daeseoksong/afterglow-mcp"><code>@daeseoksong/afterglow-mcp</code></a> on npm.<br>
-        Register it and Claude Code gets 26 slash commands (<code>guide · init · create · learn · handoff · sign · resume · list · inspect · ask · edit · council · council_summary · history · audit · recalibrate · correct · archive · version · access · interview · export · import · verify · status · gc</code>).
+        Register it and Claude Code gets <b>just 8 slash commands</b> (<code>guide · create · learn · ask</code> for the happy path + <code>agent · interview · share · admin</code> grouping everything else).
       </td>
     </tr>
     <tr>
@@ -115,86 +115,60 @@ claude /afterglow ask    jiyoon "..."
 
 See [`server/README.md`](./server/README.md) for the full tool reference.
 
-> **Two ways to invoke.** Afterglow is an MCP server, so the actual tool calls are JSON like `afterglow_handoff({slug: "jiyoon", action: "start"})`. You can drive it either way:
-> 1. **Natural language** — say "initialize afterglow" and Claude picks the right tool.
-> 2. **Slash command** — from Claude Code's prompt box, **`/mcp__afterglow__<name>`** (e.g. `/mcp__afterglow__init`, `/mcp__afterglow__ask`) with argument auto-complete. (Exposed as MCP prompts — note the form is `/mcp__afterglow__init`, not `/afterglow init`.)
+> **Two ways to invoke.** Afterglow is an MCP server, so the actual tool calls are JSON like `afterglow_interview({slug: "jiyoon", action: "handoff-start"})`. You can drive it either way:
+> 1. **Natural language** — say "create an afterglow agent for Jiyoon" and Claude picks the right tool.
+> 2. **Slash command** — from Claude Code's prompt box, **`/mcp__afterglow__<name>`** (e.g. `/mcp__afterglow__create`, `/mcp__afterglow__ask`) with argument auto-complete. (Exposed as MCP prompts — note the form is `/mcp__afterglow__ask`, not `/afterglow ask`.)
 >
 > The `claude /afterglow …` notation in this README is shorthand for readability; in practice use one of the two ways above.
 
-### ⌨ Slash commands — type `afterglow:` to use them (26)
+### ⌨ Slash commands — just 8 (type `afterglow:` to use them)
 
 **How to invoke:**
-1. Type **`afterglow:`** in the prompt box → a command list appears.
+1. Type **`afterglow:`** in the prompt box → the 8-command list appears.
 2. Arrow-select the one you want → **Tab**.
 3. It becomes **`/mcp__afterglow__<name>`** with **grey hints** for the arguments — fill them in and run.
 
-> `afterglow:init` ⇥ `/mcp__afterglow__init` is a 1:1 mapping (`afterglow:` = what you type to find it, `/mcp__afterglow__` = the resolved form). Natural language ("initialize afterglow") works identically. Tools with many arguments (interview `attach`/`answer`, …) are often easier in natural language.
+> **🧭 You don't have to remember arguments or actions.** Omit anything required and the tool replies with a numbered menu instead of an error — run `afterglow:agent` with nothing and it lists its 10 actions; run `afterglow:admin` with just an area and it lists that area's actions. Natural language ("make an Afterglow agent for Jiyoon") works identically. (`(parens)` below mark optional args.)
 
-> **🧭 You don't have to fill args in — missing required ones are guided.** Run a tool with a required arg omitted and it returns **numbered choices + help** instead of erroring: e.g. just `afterglow:ask` → "①jiyoon ②jaehoon … ③type your own", and each argument is tagged **`[필수]`(required) / `[선택]`(optional)**. (The `(parens)` in the tables below also mark optional args.)
-
-#### Start here
+#### Core — the whole happy path
 | Command | Args (parens = optional) | What | Example |
 | --- | --- | --- | --- |
 | `afterglow:guide` | (`slug`) | **"what do I do?"** — state-aware orientation | `guide` |
 | `afterglow:create` | `slug` `name` `role` (`signer` `tenure` `bio`) | create an agent — **auto-inits**; `signer` activates in one call | `create → slug:jiyoon, name:Jiyoon Lee, role:Product Designer, signer:Jiyoon Lee` |
 | `afterglow:learn` | `slug` (`path` / `text` / `url` `title`) | **add knowledge** `ask` will search (file/folder, paste, or URL) | `learn → slug:jiyoon, text:"<paste a note>"` |
-| `afterglow:ask` | `slug` `question` | ask the persona | `ask → slug:jiyoon, question:how did you cut onboarding drop-off?` |
+| `afterglow:ask` | `slug` *or* `slugs`(2–6) + `question` | ask the persona — **multiple slugs = joint session** (formerly council) | `ask → slug:jiyoon, question:how did you cut drop-off?` |
 
-#### Setup · sign · archive
-| Command | Args (parens = optional) | What | Example |
+#### Grouped — everything else lives behind four tools
+| Command | Routing | Covers | Example |
 | --- | --- | --- | --- |
-| `afterglow:init` | (none) | bootstrap `~/.claude/afterglow/` (usually unneeded — `create` auto-inits) | `afterglow:init` |
-| `afterglow:sign` | `slug` `signer` | sign consent → active | `sign → slug:jiyoon, signer:Jiyoon Lee` |
-| `afterglow:resume` | `slug` | paused/draft → active | `resume → slug:jiyoon` |
-| `afterglow:archive` | `action`(archive\|restore\|list) (`slug`) | archive / restore / list | `archive → action:archive, slug:jiyoon` |
-
-#### Daily
-| Command | Args | What | Example |
-| --- | --- | --- | --- |
-| `afterglow:list` | (`status`) | list agents | `list` / `list → status:active` |
-| `afterglow:status` | (none) | global dashboard | `status` |
-| `afterglow:inspect` | `slug` | one agent in detail | `inspect → slug:jiyoon` |
-| `afterglow:edit` | `slug` (`bio` `name` `role` / `open` / `revalidate`) | edit (fields / open in editor / revalidate) | `edit → slug:jiyoon, open:true` |
-| `afterglow:history` | `slug` (`filter` `limit`) | event/conversation log | `history → slug:jiyoon, filter:payment` |
-
-#### Ops · trust · access · audit
-| Command | Args | What | Example |
-| --- | --- | --- | --- |
-| `afterglow:correct` | `slug` `action`(feedback\|edit-answer\|save-rule\|list) (`feedback` `recordId`) | manual correction | `correct → slug:jiyoon, action:feedback, feedback:settlement is weekly` |
-| `afterglow:recalibrate` | `slug` (`byTopic` `apply`) | auto-recalibrate confidence | `recalibrate → slug:jiyoon, apply:true` |
-| `afterglow:access` | `slug` `action`(list\|allow\|deny\|remove\|set-default\|check) (`rule` `caller`) | call-permission policy | `access → slug:jiyoon, action:allow, rule:user:ykhyun` |
-| `afterglow:audit` | (`slug` `fast` `checkpoint`) | audit log + integrity verify | `audit → checkpoint:true` |
-| `afterglow:version` | `slug` `action`(list\|diff\|rollback\|tag\|snapshot) (`versionA` `tag`) | persona version history | `version → slug:jiyoon, action:rollback, versionA:v3` |
-| `afterglow:gc` | `action`(list\|prune-versions\|purge-media\|purge-archive) (`slug` `apply`) | retention/cleanup (dry-run default) | `gc → action:prune-versions, slug:jiyoon` |
-
-#### Interview · council
-| Command | Args | What | Example |
-| --- | --- | --- | --- |
-| `afterglow:handoff` | `slug` `action`(start\|review\|status\|finalize\|abort) (`signer`) | self-review handoff | `handoff → slug:jiyoon, action:start` |
-| `afterglow:interview` | `slug` `action`(start\|add-question\|answer\|gap-check\|suggest-questions\|attach\|review\|annotate\|status\|list\|inspect\|finalize\|abort\|transcribe\|export-sheet\|import-answers) (`session` `title` `interviewer` `mode` `sheet`) | successor-driven interviews (real-time sync / file-based async) | `interview → slug:jiyoon, action:start, mode:async` |
-| `afterglow:council` | `slugs` `question` | multi-agent council | `council → slugs:jiyoon,jaehoon, question:does onboarding affect payments?` |
-| `afterglow:council-summary` | (`file`) | auto-summarize a transcript | `council-summary` |
-
-#### Portable (hot-plug)
-| Command | Args | What | Example |
-| --- | --- | --- | --- |
-| `afterglow:export` | (`slugs` `all`) | export an agent bundle | `export → slugs:jiyoon,jaehoon` / `export → all:true` |
-| `afterglow:import` | `input` (`expectAnchor`) | import a bundle/folder | `import → input:./afterglow-export-…/, expectAnchor:sha256:…` |
-| `afterglow:verify` | `input` | read-only pre-import check | `verify → input:./afterglow-export-…/` |
+| `afterglow:agent` | `action` + (`slug` …) | `list` · `status`(dashboard) · `inspect` · `edit`(fields / `open` in editor / `revalidate`) · `sign` · `resume` · `archive` · `restore` · `history` · `init` | `agent → action:sign, slug:jiyoon, signer:Jiyoon Lee` |
+| `afterglow:interview` | `action` + (`slug` `session` …) | successor-driven interviews — `start`(auto question suggestions) · `add-question` · `answer` · `gap-check` · `attach`(audio/video) · `transcribe`(WASM whisper) · `export-sheet`/`import-answers`(HTML answer sheet; ≤0.12 legacy sheets/JSON accepted too) · `finalize`(dual-sign) — plus the departing person's self-review as `handoff-start` · `handoff-review` · `handoff-status` · `handoff-finalize` · `handoff-abort` | `interview → slug:jiyoon, action:start, mode:async` |
+| `afterglow:share` | `action` + (`slugs`/`input` …) | `export`(Ed25519-signed bundle) · `import`(signature + integrity verified; tampered bundles refused) · `verify`(read-only pre-check) | `share → action:export, slugs:jiyoon` |
+| `afterglow:admin` | `area` + `action` | `access`(call policy) · `audit`(hash-chained log + checkpoints) · `correct`(feedback · edit-answer · save-rule · record-answer · data-subject-export) · `version`(snapshots / diff / rollback / tag) · `gc`(retention, dry-run default) | `admin → area:version, action:rollback, slug:jiyoon, versionA:v3` |
 
 **Example flow:**
 ```text
-afterglow:init                        ⇥  /mcp__afterglow__init
-afterglow:create   → slug:jiyoon, name:Jiyoon Lee, role:Product Designer
-afterglow:sign     → slug:jiyoon, signer:Jiyoon Lee
+afterglow:create   → slug:jiyoon, name:Jiyoon Lee, role:Product Designer, signer:Jiyoon Lee
+afterglow:learn    → slug:jiyoon, path:./notes/
 afterglow:ask      → slug:jiyoon, question:how did you cut step-3 drop-off?
+afterglow:agent    → action:status
 afterglow:interview→ slug:jiyoon, action:start, title:Payment gaps, interviewer:J. Kim
 ```
 
-**Three ways to edit:**
-- **Fields directly**: `afterglow:edit` → `slug` + `bio`/`name`/`role` (structured patch, auto-validated + system-prompt regenerated + snapshot)
-- **Open in an editor**: `open:true` → prints the `persona.json` path + a backup snapshot → edit raw in `vim`/`code`
-- **Revalidate**: after editing, `revalidate:true` → validates the edited `persona.json` (rejects + keeps it if invalid) + regenerates `system-prompt.md` + snapshot
+#### Migrating from ≤0.12 (26 tools)
+Same features, new addresses — nothing was dropped except `council_summary` and `recalibrate` (the v0.12 grounding gate made auto-recalibration redundant):
+
+> **Old files stay usable.** `interview --action import-answers` also accepts artifacts made by older versions: a legacy answers JSON (`{…, answers:[{id, title, declined, answer}]}`) imports directly — questions the session doesn't have are auto-created from their titles — and a pre-v0.13 HTML question sheet seeds its full question wording into the session first, so the matching answers JSON then lands on the same ids.
+
+| Old tool | Now |
+| --- | --- |
+| `init` / `list` / `status` / `inspect` / `edit` / `sign` / `resume` / `history` | `agent` + `action:<same name>` |
+| `archive` (`action:archive`/`restore`) | `agent` + `action:archive` / `action:restore` |
+| `handoff` (`start`/`review`/`status`/`finalize`/`abort`) | `interview` + `action:handoff-<same>` |
+| `export` / `import` / `verify` | `share` + `action:<same name>` |
+| `access` / `audit` / `correct` / `version` / `gc` | `admin` + `area:<same name>` (+ the old `action`) |
+| `council` | `ask` with `slugs:[a, b, …]` |
+| `council_summary` · `recalibrate` | removed |
 
 ## 📐 Interactive proposal (frontend)
 
@@ -205,14 +179,16 @@ npm install
 npm run dev      # → http://localhost:5173
 ```
 
-| Group | Screens | Slash commands |
+| Group | Screens | v0.13 command |
 | --- | --- | --- |
 | At a glance | Overview | (intro) |
-| Setup · Handoff | Install · Create agent · Self-review handoff | `init` · `create` · `handoff` |
-| Daily | List · Ask · Inspect · Edit · History | `list` · `ask` · `inspect` · `edit` · `history` |
-| Multi-agent | Council · Re-read transcript | `council` · `log` |
-| Ops | Versions · Access · Audit · Manual / auto recalibration | `version` · `access` · `audit` · `correct` · `recalibrate` |
+| Setup · Handoff | Install · Create agent · Self-review handoff | `create` · `interview handoff-*` |
+| Daily | List · Ask · Inspect · Edit · History | `agent list/inspect/edit/history` · `ask` |
+| Multi-agent | Council · Re-read transcript | `ask --slugs` |
+| Ops | Versions · Access · Audit · Corrections | `admin` (version · access · audit · correct) |
 | Reference | Roadmap · Ethics | — |
+
+> The proposal screens predate the v0.13 consolidation, so they demo the old per-command layout — the column above maps each screen to today's 8-tool surface.
 
 ## ⌨ Keyboard / Navigation
 
@@ -226,30 +202,30 @@ npm run dev      # → http://localhost:5173
 - Agent chips (`T.Agent`) jump to the inspect screen.
 - Topbar ←/→ buttons, footer prev/next jump cards.
 
-## 🙋 Self-review onboarding (`afterglow_handoff`)
+## 🙋 Self-review onboarding (`interview --action handoff-*`)
 
 A week or two before leaving, the person sits down for a 1-on-1 review session with their own agent:
 
 ```bash
 # 1. Start — auto-generate N sample questions (or load coworker-written questions.txt)
-claude /afterglow handoff jiyoon --action start --limit 12
+claude /afterglow interview jiyoon --action handoff-start --limit 12
 
 # 2. Review — keep / edit / decline each question
 #    edit: write your own answer to override the agent's draft
 #    decline: "I won't answer that — please ask someone else"
-claude /afterglow handoff jiyoon --action review \
+claude /afterglow interview jiyoon --action handoff-review \
   --reviews '[{"id":"q-…","action":"edit","userAnswer":"…"}, …]'
 
 # 3. Status (any time)
-claude /afterglow handoff jiyoon --action status
+claude /afterglow interview jiyoon --action handoff-status
 
 # 4. Self-sign + flip to active
-claude /afterglow handoff jiyoon --action finalize --signer "Jiyoon Lee"
+claude /afterglow interview jiyoon --action handoff-finalize --signer "Jiyoon Lee"
 ```
 
 - Edited / declined answers are absorbed into `persona.bio` as `## handoff 답변` / `## 답하지 않기로 한 영역` blocks so future `ask` calls cite them first.
 - Every step lands in `audit.log` + `history.log` with the hash-chained trail.
-- Resume by re-running the same command. `--action abort` discards. `--sign-partial` finalises even with pending items.
+- Resume by re-running the same command. `--action handoff-abort` discards. `--sign-partial` finalises even with pending items.
 
 This delivers on the core promise:
 > *"A digital self the person actually consented to."* Persona extracted from raw materials may diverge from the person's intent, so the review pass is mandatory.
@@ -258,11 +234,11 @@ This delivers on the core promise:
 
 | Case | Who signs | `--signer` value | Recommended flow |
 | --- | --- | --- | --- |
-| Person reviews before leaving | Themselves | `"Jiyoon Lee"` | `/afterglow handoff … --action finalize` |
+| Person reviews before leaving | Themselves | `"Jiyoon Lee"` | `/afterglow interview … --action handoff-finalize` |
 | Person already gone / unreachable | HR or manager on their behalf | `"HR · J. Kim (delegated, person unavailable)"` | Same command. The signer string **must** flag the delegation explicitly |
 | No consent at all | (Do not sign) | — | Keep the agent at `paused`; never finalize |
 
-`afterglow_sign` / `handoff finalize` **trust the `signer` string verbatim** — they record it in `consent.md` and `audit.log` but do **not** perform identity verification (SSO / MFA). This is a deliberate PoC choice: in production, wrap the tool with SSO tokens, corporate ID checks, or an HR approval system.
+`agent sign` / `handoff-finalize` **trust the `signer` string verbatim** — they record it in `consent.md` and `audit.log` but do **not** perform identity verification (SSO / MFA). This is a deliberate PoC choice: in production, wrap the tool with SSO tokens, corporate ID checks, or an HR approval system.
 
 ## 🎤 Follow-up interviews (v0.2) — the successor interviews the leaver
 
@@ -289,17 +265,17 @@ Export an agent and **another Afterglow user picks it up instantly** — one age
 
 ```bash
 # ── Sender: export ──
-claude /afterglow export --slugs jiyoon jaehoon --exportedBy "Jiyoon Lee"   # or --all
+claude /afterglow share export --slugs jiyoon jaehoon --exportedBy "Jiyoon Lee"   # or --all
 #   → creates ./afterglow-export-<date>/ (manifest.json + per-agent integrity hash)
 #   → zip/tar the folder and send it, or copy via USB / shared drive
 
 # ── Receiver: verify → import ──
-claude /afterglow verify  ./afterglow-export-…/                              # read-only pre-flight
-claude /afterglow import  ./afterglow-export-…/ --importedBy "J. Kim" --from "Jiyoon Lee" --trustSigner "Jiyoon Lee"
+claude /afterglow share verify ./afterglow-export-…/                              # read-only pre-flight
+claude /afterglow share import ./afterglow-export-…/ --importedBy "J. Kim" --from "Jiyoon Lee" --trustSigner "Jiyoon Lee"
 #   → signed agents land as active, unsigned as paused
 ```
 
-`import` automatically checks: **schema** (zod) · **integrity hash** (rejects tampered bundles; `--acceptBrokenChain` to force, recorded as `trustLevel: broken-chain`) · **signature presence** · **symlink stripping** (blocks a bundle whose link points at `~/.ssh/id_rsa`) · **prompt-injection scan**. Provenance is written to `provenance.json`, after which every `ask` answer carries an "imported" banner. Slug collisions resolve with `--as <new-slug>` or `--merge` (interview rounds only). A bare `agents/<slug>/` folder imports too — the "I just copied one folder" case.
+`share import` automatically checks: **schema** (zod) · **integrity hash** (rejects tampered bundles; `--acceptBrokenChain` to force, recorded as `trustLevel: broken-chain`) · **signature presence** · **symlink stripping** (blocks a bundle whose link points at `~/.ssh/id_rsa`) · **prompt-injection scan**. Provenance is written to `provenance.json`, after which every `ask` answer carries an "imported" banner. Slug collisions resolve with `--as <new-slug>` or `--merge` (interview rounds only). A bare `agents/<slug>/` folder imports too — the "I just copied one folder" case.
 
 > **New to this?** The hands-on notebook [`docs/afterglow-hands-on.ipynb`](./docs/afterglow-hands-on.ipynb) walks install → create → interview → export/import as copy-paste cells.
 
@@ -308,7 +284,7 @@ claude /afterglow import  ./afterglow-export-…/ --importedBy "J. Kim" --from "
 - **🪶 Persona + RAG, not fine-tuning.** Inject the person's tone and sources into Claude's context — fully compatible with Claude Code.
 - **📁 One folder per person.** Everything for an agent lives under `~/.claude/afterglow/agents/<slug>/` — backup, move, delete, hand off as a single unit.
 - **⌨ CLI-first.** No web UI, no extra servers — slash commands do everything.
-- **🤝 Agents know each other.** Explicit councils + opportunistic peer-asks are both logged as council markdown files.
+- **🤝 Agents know each other.** `ask --slugs a,b` runs a joint session — each participant answers from their own sources and defers by `@slug`; every joint ask lands in each participant's history and the audit log.
 - **🔒 Honest by default.** Every answer carries ✦, a confidence score, and sources. If the agent doesn't know, it says so.
 
 ## 🔧 How `ask` works
@@ -387,7 +363,7 @@ Afterglow/
 │  │  ├─ rag.ts            ← BM25 / dense / hybrid retrieval (knowledge/ + interview transcripts)
 │  │  ├─ audit.ts          ← SHA-256 hash-chained immutable log
 │  │  └─ tools/            ← 22 tools: …18 above… + interview · export · import · verify
-│  └─ test/                ← 323 vitest + stdio handshake (covers all 26 tools)
+│  └─ test/                ← 321 vitest + stdio handshake (covers all 8 tools + every action family)
 │
 └─ docs/
    └─ design-source/       ← original claude.ai/design hand-off (JSX) — reference
@@ -403,7 +379,6 @@ Afterglow/
 ├─ config.yml                ← env config (embedding model · storage root)
 ├─ registry.json             ← index of all agents
 ├─ audit.log                 ← SHA-256 hash-chained tool-call log
-├─ councils/                 ← council + peer-ask transcripts
 ├─ archive/                  ← archived agent folders (returned via restore)
 └─ agents/<slug>/
    ├─ persona.json
@@ -411,8 +386,8 @@ Afterglow/
    ├─ mcp-allowlist.yml      ← (reserved) per-agent MCP allowlist
    ├─ consent.md             ← signature block flips status draft → active
    ├─ history.log
-   ├─ access.json            ← call permission policy (afterglow_access)
-   ├─ handoff.json           ← self-review session state (afterglow_handoff)
+   ├─ access.json            ← call permission policy (admin access)
+   ├─ handoff.json           ← self-review session state (interview handoff-*)
    ├─ followup.json          ← follow-up interview pre-authorisation (handoff → interview)
    ├─ provenance.json        ← origin · trust · custody trail (written by afterglow_import)
    ├─ corrections.log        ← user-correction trail (afterglow_correct)
@@ -440,8 +415,8 @@ npm run build
 cd server
 npm install
 npm run build
-npm test             # 323 vitest tests
-npm run test:stdio   # real MCP stdio handshake (all 26 tools + feature round-trips)
+npm test             # 321 vitest tests
+npm run test:stdio   # real MCP stdio handshake (8 tools · every action family round-trip)
 npm run test:all     # unit → build → stdio
 ```
 
@@ -455,7 +430,7 @@ Afterglow v0.2.0 is a **proof of concept**. Things to know before pulling it int
 | **RAG indexing** | `.md` / `.txt` / `.csv` / `.jsonl` only — no PDF parsing | Convert PDFs to `.md` externally before dropping in |
 | **`audit.log` scale** | Every verify reads the whole file and re-hashes | At tens of thousands of rows, add chunked checkpoints |
 | **`.versions/` retention** | Every edit / sign / handoff / rollback is a permanent snapshot | Periodic manual pruning (`rm` + sync `tags.json`) |
-| **Mutator per-tool ACL** | `correct` · `edit` · `recalibrate apply` · `version` (rollback·tag·snapshot) · `handoff` · `interview` (mutating actions) · `archive` (archive/restore) · `gc` (apply+slug) all honour the agent's access policy (v0.10). `import` is excluded — it creates new agents, so a per-agent policy has nothing to consult | Global import allowlist |
+| **Mutator per-tool ACL** | `admin correct` · `agent edit` · `admin version` (rollback·tag·snapshot) · `interview` (incl. `handoff-*`, mutating actions) · `agent archive/restore` · `admin gc` (apply+slug) all honour the agent's access policy (v0.10). `share import` is excluded — it creates new agents, so a per-agent policy has nothing to consult | Global import allowlist |
 | **GDPR delete** | `archive` only moves to `archive/<slug>/` — not real deletion | After retention window, manual `rm -rf` + registry edit |
 | **Multi-process** | In-process locks only — assumes one stdio server | Externalise to Redis/DB mutex for distributed runs |
 | **Side-log integrity** | Only `audit.log` is hash-chained — `history.log` / `consent.md` etc are plain text | Hash sibling files into audit `meta` for full coverage |
@@ -467,22 +442,22 @@ These are deliberate PoC trade-offs; closing them is a separate exercise for any
 
 ## 🗺 Roadmap
 
-### Now (v0.12.0)
+### Now (v0.13.0)
 - [x] 18-screen interactive proposal (Vite + React 19 + TS)
 - [x] Cmd+K palette + keyboard shortcuts + cross-screen click navigation
-- [x] All 26 MCP tools (**`guide`** · `init` · `create` · **`learn`** · `handoff` · `sign` · `resume` · `list` · `inspect` · `ask` · `edit` · `council` · `council_summary` · `history` · `audit` · `recalibrate` · `correct` · `archive` · `version` · `access` · `interview` · `export` · `import` · `verify` · `status` · `gc`)
+- [x] All 8 MCP tools (**`guide`** · **`create`** · **`learn`** · **`ask`** · `agent` · `interview` · `share` · `admin`) — every ≤0.12 capability lives on as an action of one of these
 - [x] **Usability (v0.11)** — **`guide`** state-aware getting-started; **`learn`** to add knowledge (text/file/folder/URL) so you never hand-copy into a hidden folder; **`create --signer`** auto-inits *and* activates so the happy path is 3 steps (`create → learn → ask`), no `init`
-- [x] **Grounding / anti-hallucination (v0.12)** — `ask`/`council` now lead with a hard **grounding contract** (cite `[소개]`/`[n]`/`[보정]` or don't say it) + a backend-independent **coverage gate** (verdict 근거 없음 / 매우 부족 / 부분 / 충분, missing terms named) so unprovided info must be refused, not invented. Fixed the confidence bug (was ~100% for any BM25 hit) and added Korean particle-stripping so retrieval actually finds inflected matches. Proven by a multi-angle QA suite (empty / unrelated / partial / adversarial-injection / dense-backend / council)
+- [x] **Grounding / anti-hallucination (v0.12)** — `ask` (single & joint) now leads with a hard **grounding contract** (cite `[소개]`/`[n]`/`[보정]` or don't say it) + a backend-independent **coverage gate** (verdict 근거 없음 / 매우 부족 / 부분 / 충분, missing terms named) so unprovided info must be refused, not invented. Fixed the confidence bug (was ~100% for any BM25 hit) and added Korean particle-stripping so retrieval actually finds inflected matches. Proven by a multi-angle QA suite (empty / unrelated / partial / adversarial-injection / dense-backend / joint ask)
+- [x] **Radical simplification (v0.13)** — the tool surface consolidated **26 → 8** with features intact: `guide`/`create`/`learn`/`ask` stay standalone; everything else grouped into `agent`, `interview`(+`handoff-*` self-review), `share`, `admin`. `council` became `ask --slugs`; `council_summary`/`recalibrate` removed. Omitted actions/areas come back as numbered menus
 - [x] zod persona schema + auto-rendered system prompt
 - [x] Lexical RAG retrieval — BM25, no external deps — `knowledge/` + interview transcripts
 - [x] SHA-256 hash-chained audit log + verifier
-- [x] Consent.md sign workflow (draft → active gate on `ask` / `council`)
-- [x] Recalibrate: global + **expertise-aware by-topic** diagnostic
-- [x] **`afterglow_archive`** — archive / restore agents (archive/<slug>/ separate folder; restore lands in paused)
-- [x] **Council moderator** — stronger consensus rules + `afterglow_council_summary` auto-summarizer
+- [x] Consent.md sign workflow (draft → active gate on `ask`, single & joint)
+- [x] **Archive / restore** (`agent --action archive|restore`) — archive/<slug>/ separate folder; restore lands in paused
+- [x] **Joint ask** (`ask --slugs`, formerly council) — moderator consensus rules + per-participant grounding verdicts, each participant answers from their own sources only
 - [x] **Multi-round interviews** (`afterglow_interview`) — successor-driven N rounds + **auto gap detection** + **audio/video attach** + dual signature
-- [x] **Hot-plug** (`afterglow_export · import · verify`) — multi-agent bundle transfer + integrity hash · prompt-injection scan · symlink stripping · `provenance` trail
-- [x] **Global dashboard** (`afterglow_status`) + **retention/GC** (`afterglow_gc` — snapshot prune · media purge · archive hard-delete)
+- [x] **Hot-plug** (`share --action export|import|verify`) — multi-agent bundle transfer + integrity hash · prompt-injection scan · symlink stripping · `provenance` trail
+- [x] **Global dashboard** (`agent --action status`) + **retention/GC** (`admin --area gc` — snapshot prune · media purge · archive hard-delete)
 - [x] **Transcription** (`interview transcribe` — local whisper `--apply` / Claude polish `--text`) + **pre-interview question suggestions** (`suggest-questions`) + **review-then-index** (`review`)
 - [x] **import `--expectAnchor`** (bundle-tamper detection) + **audit checkpoint/fast** (incremental verification for large logs)
 - [x] **BM25 ranking** + opt-in **dense-vector backend** (`AFTERGLOW_RAG_BACKEND=dense` · embeddings/ cache · transparent lexical fallback)
@@ -493,16 +468,17 @@ These are deliberate PoC trade-offs; closing them is a separate exercise for any
 - [x] **Auto question-suggestion on new interview** — `interview start` embeds a 4-signal gap analysis and asks "proceed with these questions?" (disable with `suggest=false`)
 - [x] **Missing-argument elicitation** — omit a required arg and the tool returns numbered choices (+ "type your own") with `[필수]`/`[선택]` tags; candidates are dynamic (existing slugs · action enums · session ids · pending question ids)
 - [x] **Choose how interviews run** — real-time (`mode=sync`, record `answer` live) vs file-based (`mode=async`): `export-sheet` writes a self-contained **HTML form** by default (checkbox UI: answered / declined / N/A / meaningless · `localStorage` auto-save — closing and reopening restores progress) or `--format md` for Markdown. The interviewee hits "Download answers (JSON)" → `import-answers` auto-detects JSON/MD and ingests it
+- [x] **Legacy sheet reuse (v0.13)** — `import-answers` also accepts artifacts from older versions: a ≤0.12 answers JSON (`{…, answers:[{id, title, declined, answer}]}`) imports directly with questions the session lacks **backfilled from their titles**, and a pre-v0.13 HTML question sheet **seeds its full question wording** into the session so the matching answers JSON then lands on the same ids — no re-interviewing after upgrading
 - [x] **Close the audit loop / record-answer** — `correct --action record-answer` archives the answer Claude composed (question · answer · confidence · sources) into `answers.log`; `correct list` shows it alongside corrections. Previously `ask` only returned a context bundle and the actual answer never came back into Afterglow
-- [x] **Mutator per-tool ACL** — `correct` · `edit` · `recalibrate apply` · `version` (rollback·tag·snapshot) now honour the agent's access policy via a `caller` arg (required when policy is deny-default)
+- [x] **Mutator per-tool ACL** — `correct` · `edit` · `version` (rollback·tag·snapshot) now honour the agent's access policy via a `caller` arg (required when policy is deny-default)
 - [x] **persona.bio truncation fix** — when bio overflows 20k, the *oldest* absorbed interview blocks are dropped first (previously the new block was silently discarded). `renderInterviewBlock` now also includes the `skipped` (N/A / meaningless) section so future asks know which areas the interviewee marked off-limits
 - [x] **Mutator ACL extended to all (v0.10)** — `handoff` · `interview` mutating actions · `archive` (archive/restore) · `gc` (apply + specific slug) now also honour `caller` + access policy. Read-only and model-management calls still pass
 - [x] **Ed25519 bundle-manifest signing (v0.10, P3 minimum)** — `export` signs the `bundleHash` with a local keypair and embeds the public key + signer name in the manifest (TOFU). `verify`/`import` check it — a tampered signature is refused at import (force with `acceptBrokenChain`). Pre-v0.10 unsigned bundles still go through as "unsigned" for back-compat
 - [x] **Data-subject export (v0.10, P4 minimum)** — `correct --action data-subject-export` returns a single JSON dump of persona · consent · interviews · history · corrections · recorded answers · provenance · audit counts. Read-only (passes even under deny policy)
 - [x] **Status refinements (v0.10)** — per-agent staleness (`lastActivityAt`/`staleDays`, 30 d+ flagged with 🕰) and dense RAG health counter (`denseFailures`/`denseLastError`)
 - [x] **HTML answer-sheet cross-device (v0.10)** — "Save progress (file)" / "Load progress" buttons let the interviewee carry an in-progress sheet across machines
-- [x] **Slash commands** `/mcp__afterglow__<name>` — 24 MCP prompts (one per tool) — type `afterglow:` → Tab to invoke
-- [x] 323 vitest + extended stdio handshake (covers all 26 tools + prompts) — incl. a multi-angle anti-hallucination grounding suite
+- [x] **Slash commands** `/mcp__afterglow__<name>` — 8 MCP prompts (one per tool) — type `afterglow:` → Tab to invoke
+- [x] 321 vitest + extended stdio handshake (8 tools + prompts) — incl. a multi-angle anti-hallucination grounding suite
 - [x] Published on npm (`@daeseoksong/afterglow-mcp`)
 - [x] **Hands-on Jupyter notebook** ([`docs/afterglow-hands-on.ipynb`](./docs/afterglow-hands-on.ipynb)) — beginner-friendly walk-through of every feature
 

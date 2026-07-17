@@ -148,7 +148,7 @@ describe('guide · orientation', () => {
     const r = await runGuide({} as never);
     expect(r.isError).toBeUndefined();
     expect(r.content[0].text).toMatch(/빠른 시작/);
-    expect(r.content[0].text).toMatch(/create → learn → sign → ask/);
+    expect(r.content[0].text).toMatch(/create → learn → ask/);
     expect(r.content[0].text).toMatch(/지금 바로/);
   });
 

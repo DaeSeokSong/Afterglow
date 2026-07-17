@@ -4,7 +4,6 @@
  *   ~/.claude/afterglow/
  *   ├─ config.yml                ← env config (embedding model, storage root, …)
  *   ├─ registry.json             ← index of all agents
- *   ├─ councils/                 ← council + peer-ask transcripts (markdown)
  *   └─ agents/<slug>/
  *      ├─ persona.json
  *      ├─ system-prompt.md
@@ -78,10 +77,6 @@ export function configPath(): string {
 
 export function registryPath(): string {
   return join(rootDir(), 'registry.json');
-}
-
-export function councilsDir(): string {
-  return join(rootDir(), 'councils');
 }
 
 export function agentsDir(): string {
@@ -299,7 +294,6 @@ export async function init(opts: InitOptions = {}): Promise<InitResult> {
 
   await mkdirIdempotent(root, created);
   await mkdirIdempotent(agentsDir(), created);
-  await mkdirIdempotent(councilsDir(), created);
 
   if (!(await pathExists(configPath()))) {
     await fs.writeFile(configPath(), DEFAULT_CONFIG(embeddingModel), 'utf8');
@@ -584,7 +578,7 @@ export async function getStatus(slug: string): Promise<RegistryEntry['status']> 
 }
 
 /**
- * Gate for `afterglow_ask` (and council). Allows only `active` agents.
+ * Gate for `afterglow_ask` (single & multi). Allows only `active` agents.
  * Bypass for tests / debug: AFTERGLOW_ALLOW_DRAFT=1 disables the gate.
  * Archived agents are always blocked (must be restored first).
  */

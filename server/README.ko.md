@@ -23,7 +23,7 @@
 <p>
   <a href="#-한-줄-설치"><b>한 줄 설치</b></a> ·
   <a href="#-동작-원리">동작 원리</a> ·
-  <a href="#-도구-26개">도구 26개</a> ·
+  <a href="#-도구-8개">도구 8개</a> ·
   <a href="#-추가-인터뷰--미디어-첨부">추가 인터뷰</a> ·
   <a href="#-핫플러그--exportimport">핫플러그</a> ·
   <a href="#-폴더-구조">폴더 구조</a> ·
@@ -55,23 +55,22 @@ claude mcp add afterglow npx -y @daeseoksong/afterglow-mcp
 
 별도 GPU · 임베딩 API · 외부 서버 필요 없음. **무료**.
 
-이어서 첫 사용:
+이어서 첫 사용 — **3단계, init 불필요**:
 
 ```bash
-claude /afterglow init                                              # ~/.claude/afterglow/ 부트스트랩
-claude /afterglow create jiyoon --name 이지윤 --role "프로덕트 디자이너"
-claude /afterglow sign jiyoon --signer "이지윤"                      # consent.md 서명 → status active
-claude /afterglow list
-claude /afterglow ask jiyoon "온보딩 step 3 이탈, 어떻게 줄였어요?"
+claude /afterglow guide                                              # (선택) 뭐부터 하지? — 상태별 안내
+claude /afterglow create jiyoon --name 이지윤 --role "프로덕트 디자이너" --signer "이지윤"   # 자동 init + 활성화
+claude /afterglow learn  jiyoon --text "<붙여넣기>"   # 또는 --path ./notes/  또는 --url https://…
+claude /afterglow ask    jiyoon "온보딩 step 3 이탈, 어떻게 줄였어요?"
 ```
 
-> **참고 — 두 가지 호출 방식.** Afterglow 는 MCP 서버라 도구는 실제로 `afterglow_handoff({slug: "jiyoon", action: "start"})` 같은 JSON 호출입니다.
-> 1. **자연어**: "afterglow 초기화해줘" → Claude 가 알맞은 도구 호출.
-> 2. **슬래시 명령**: Claude Code 입력창에서 **`/mcp__afterglow__<이름>`** (예: `/mcp__afterglow__init`) 직접 호출 + 인자 자동완성 — MCP prompt 로 노출됩니다 (형식이 `/afterglow init` 이 아니라 `/mcp__afterglow__init`).
+> **참고 — 두 가지 호출 방식.** Afterglow 는 MCP 서버라 도구는 실제로 `afterglow_interview({slug: "jiyoon", action: "handoff-start"})` 같은 JSON 호출입니다.
+> 1. **자연어**: "지윤님 에이전트 만들어줘" → Claude 가 알맞은 도구 호출.
+> 2. **슬래시 명령**: Claude Code 입력창에서 **`/mcp__afterglow__<이름>`** (예: `/mcp__afterglow__create`) 직접 호출 + 인자 자동완성 — MCP prompt 로 노출됩니다 (형식이 `/afterglow create` 가 아니라 `/mcp__afterglow__create`).
 >
 > 본 README 의 `claude /afterglow …` 표기는 약식이며, 실제로는 위 두 방식 중 하나로 씁니다.
 >
-> **슬래시 명령 26종** — 입력창에 **`afterglow:`** 치면 목록 → 화살표 선택 → **Tab** → `/mcp__afterglow__<이름>` 으로 입력되고 회색 힌트로 인자 안내. 도구 26개 전부 1:1로 노출됩니다: **`guide`** · `init` · `create` · **`learn`** · `sign` · `resume` · `archive` · `list` · `status` · `inspect` · `ask` · `edit` · `history` · `correct` · `recalibrate` · `access` · `audit` · `version` · `gc` · `handoff` · `interview` · `council` · `council-summary` · `export` · `import` · `verify`. (명령별 인자·예시 표는 루트 [README](../README.ko.md) 의 "슬래시 명령" 절 참고.) 자연어로도 동일하게 호출됩니다.
+> **슬래시 명령 8종** — 입력창에 **`afterglow:`** 치면 목록 → 화살표 선택 → **Tab** → `/mcp__afterglow__<이름>` 으로 입력되고 회색 힌트로 인자 안내. 도구 8개가 1:1로 노출됩니다: **`guide`** · **`create`** · **`learn`** · **`ask`** · `agent` · `interview` · `share` · `admin`. 필수 action/area 를 비우면 에러 대신 **번호 메뉴**가 돌아옵니다. (명령별 인자·예시 표와 ≤0.12→0.13 이전 맵은 루트 [README](../README.ko.md) 의 "슬래시 명령" 절 참고.) 자연어로도 동일하게 호출됩니다.
 
 ## 🪶 왜 만들었나
 
@@ -104,9 +103,9 @@ sequenceDiagram
 
 **핵심**: `afterglow_ask`는 LLM을 호출하지 않습니다. 페르소나와 검색 결과를 구조화된 텍스트로 묶어 반환하고, Claude Code 가 자기 컨텍스트로 직접 답변을 생성합니다. → 추가 모델 / GPU / 임베딩 API 0원.
 
-## 🛠 도구 26개
+## 🛠 도구 8개
 
-> v0.2.0 에서 **`interview` · `export` · `import` · `verify`** 4개가 추가됐습니다 (18 → 22). 다중 인터뷰는 [추가 인터뷰 + 미디어 첨부](#-추가-인터뷰--미디어-첨부), 에이전트 이식은 [핫플러그](#-핫플러그--exportimport) 절을 보세요.
+> **v0.13 에서 26 → 8 로 통합**됐습니다 — 기능은 전부 그대로, 주소만 바뀌었어요. 매일 쓰는 4개(`guide` `create` `learn` `ask`)는 단독, 나머지는 4개의 그룹 도구(`agent` `interview` `share` `admin`) 아래 action 으로 삽니다. `council` 은 `ask --slugs` 로 흡수, `council_summary`/`recalibrate` 는 삭제(v0.12 근거 게이트가 자동 보정을 대체). 필수 `action`/`area` 를 비우면 에러 대신 **번호 메뉴**로 안내합니다. (≤0.12→0.13 이전 맵은 루트 [README](../README.ko.md) 참고.)
 
 <table>
   <thead>
@@ -120,12 +119,7 @@ sequenceDiagram
     <tr>
       <td><code>afterglow_guide</code></td>
       <td><code>/afterglow guide</code></td>
-      <td><b>빠른 시작 안내.</b> "방금 깔았는데 뭐부터?" 에 답하는 상태별 오리엔테이션 — create → learn → sign → ask 핵심 4단계 + 복붙 예시. 인자 없이 호출.</td>
-    </tr>
-    <tr>
-      <td><code>afterglow_init</code></td>
-      <td><code>/afterglow init</code></td>
-      <td><code>~/.claude/afterglow/</code> 부트스트랩. 멱등 — 여러 번 실행 안전. (보통 불필요 — <code>create</code> 가 자동 init)</td>
+      <td><b>빠른 시작 안내.</b> "방금 깔았는데 뭐부터?" 에 답하는 상태별 오리엔테이션 — create → learn → ask 핵심 3단계 + 복붙 예시. 인자 없이 호출.</td>
     </tr>
     <tr>
       <td><code>afterglow_create</code></td>
@@ -138,116 +132,29 @@ sequenceDiagram
       <td><b>지식 학습.</b> <code>knowledge/</code> 에 자료를 추가 — <code>ask</code> 가 검색할 내용. cwd 하위 파일/폴더, 붙여넣기 텍스트, URL. <code>.md/.txt/.json/.jsonl/.csv</code> 만 색인. 숨은 폴더를 직접 찾을 필요 없음.</td>
     </tr>
     <tr>
-      <td><code>afterglow_sign</code></td>
-      <td><code>/afterglow sign &lt;slug&gt; --signer "…"</code></td>
-      <td><code>consent.md</code>에 서명 블록 추가 + status <b>draft → active</b> 전환. 미서명 에이전트는 <code>ask</code> / <code>council</code> 거부.
-        <br><sub>⚠ <code>signer</code> 값은 그대로 기록만 됩니다 — 본인 인증(SSO·MFA) 없음. HR 대리 서명 시 <code>"HR · 김OO (대리, 본인 부재)"</code> 처럼 <b>대리</b>를 명시하세요. PoC 가정.</sub></td>
-    </tr>
-    <tr>
-      <td><code>afterglow_resume</code></td>
-      <td><code>/afterglow resume &lt;slug&gt;</code></td>
-      <td>paused / draft / learning 상태의 에이전트를 다시 active 로. <code>archive → restore</code> 직후, 또는 본인이 자리를 비웠다 돌아왔는데 기존 서명이 유효한 경우 사용. archived 는 거부 — 먼저 <code>--action restore</code> 필요.
-        <br><sub>⚠ <code>resume</code> 은 consent gate 를 <b>우회</b>합니다 (consent.md 가 유효한지 사용자 판단). 새 서명이 필요한 케이스에는 <code>sign</code> 을 쓰세요.</sub></td>
-    </tr>
-    <tr>
-      <td><code>afterglow_handoff</code></td>
-      <td><code>/afterglow handoff &lt;slug&gt; --action start|review|status|finalize|abort</code></td>
-      <td><b>본인 인계 모드 (self-review onboarding).</b> 퇴사자 본인이 자기 에이전트의 샘플 질문 N 개를 직접 검수. 각 질문에 <code>keep</code> / <code>edit</code> / <code>decline</code> 셋 중 하나. 동료가 미리 적어둔 <code>questions.txt</code> 도 받음 (에이전트 폴더 또는 CWD 안 — 절대경로 임의 파일 차단). 본인 서명으로 active 전환되고, <code>edit</code> 한 답변은 <code>persona.bio</code> 의 <code>## handoff 답변</code> 블록으로, <code>decline</code> 한 질문은 <code>## 답하지 않기로 한 영역</code> 블록으로 흡수돼서 다음 ask 부터 우선 인용됩니다.</td>
-    </tr>
-    <tr>
-      <td><code>afterglow_correct</code></td>
-      <td><code>/afterglow correct &lt;slug&gt; --action feedback|edit-answer|save-rule|list</code></td>
-      <td>ask 결과에 자연어 피드백 (<code>feedback</code> "이 부분만 다시 써줘"), 답변 라인 직접 편집 (<code>edit-answer</code>), 반복 패턴을 규칙으로 저장 (<code>save-rule</code>). <code>corrections.log</code> + <code>history.log</code> + <code>audit</code> 모두 누적.</td>
-    </tr>
-    <tr>
-      <td><code>afterglow_version</code></td>
-      <td><code>/afterglow version &lt;slug&gt; --action list|diff|rollback|tag|snapshot</code></td>
-      <td>persona 버전 히스토리. <code>edit</code> / <code>sign</code> / <code>recalibrate apply</code> / <code>handoff finalize</code> 시 자동 스냅샷. <code>diff</code> 두 버전 비교, <code>rollback</code> 복원 (안전 스냅샷 자동), <code>tag</code> 로 stable · handoff-signed 같은 라벨, <code>snapshot</code> 수동 백업. <code>agents/&lt;slug&gt;/.versions/</code> 에 보관.</td>
-    </tr>
-    <tr>
-      <td><code>afterglow_access</code></td>
-      <td><code>/afterglow access &lt;slug&gt; --action list|allow|deny|remove|set-default|check</code></td>
-      <td><code>user:</code> / <code>role:</code> / <code>team:</code> 단위 allow/deny 리스트 + default 정책. <code>ask</code> 호출 시 <code>caller</code> 인자 주면 자동 체크 (없으면 anonymous). <code>check</code> 액션으로 안전하게 시뮬레이션.</td>
-    </tr>
-    <tr>
-      <td><code>afterglow_list</code></td>
-      <td><code>/afterglow list</code></td>
-      <td>등록된 모든 에이전트를 표 / JSON 출력. <code>--status</code>, <code>--json</code> 지원.</td>
-    </tr>
-    <tr>
-      <td><code>afterglow_inspect</code></td>
-      <td><code>/afterglow inspect &lt;slug&gt;</code></td>
-      <td>페르소나 · 톤 · 자료 · MCP 권한을 박스 드로잉으로 한 화면에 표시.</td>
-    </tr>
-    <tr>
       <td><code>afterglow_ask</code></td>
       <td><code>/afterglow ask &lt;slug&gt; "..."</code></td>
-      <td>페르소나 system prompt + BM25 RAG 검색 + <b>근거 게이트(없는 정보 거절)</b> 를 묶어 반환. <b>Claude가 그 컨텍스트로 직접 답변.</b> active 에이전트만 허용.</td>
+      <td>페르소나 system prompt + BM25 RAG 검색 + <b>근거 게이트(없는 정보 거절)</b> 를 묶어 반환. <b>Claude가 그 컨텍스트로 직접 답변.</b> active 에이전트만 허용. <code>--slugs a,b</code>(2–6명)를 주면 <b>합동 세션</b>(구 council) — 참가자별 근거 판정 + 자기 근거로만 발언하는 moderator 규칙.</td>
     </tr>
     <tr>
-      <td><code>afterglow_edit</code></td>
-      <td><code>/afterglow edit &lt;slug&gt; …</code></td>
-      <td>persona.json 부분 수정 (이름·역할·소개·영역·톤·자료·MCP 권한·신뢰도). system-prompt.md 자동 재생성. <code>--dry-run</code>으로 미리보기.</td>
+      <td><code>afterglow_agent</code></td>
+      <td><code>/afterglow agent --action list|status|inspect|edit|sign|resume|archive|restore|history|init</code></td>
+      <td><b>라이프사이클 + 일상 관리 라우터.</b> <code>list</code>(목록) · <code>status</code>(전체 대시보드 + staleness + RAG/whisper 상태) · <code>inspect</code>(상세) · <code>edit</code>(필드 patch / <code>open</code> 에디터 / <code>revalidate</code> — 자동 스냅샷) · <code>sign</code>(동의 서명 → active, ⚠ 본인 인증 없음 — 대리 서명은 명시) · <code>resume</code>(재활성화 — consent gate 우회이므로 새 서명이 필요하면 sign) · <code>archive</code>/<code>restore</code>(<code>archive/&lt;slug&gt;/</code> 이동·복원, 복원은 paused) · <code>history</code>(로그 필터) · <code>init</code>(수동 부트스트랩 — 보통 불필요).</td>
     </tr>
     <tr>
-      <td><code>afterglow_council</code></td>
-      <td><code>/afterglow council &lt;slugs…&gt; "..."</code></td>
-      <td>2–6명 에이전트의 persona + RAG 컨텍스트를 묶어 회의 브리프 + <code>councils/&lt;timestamp&gt;.md</code> 회의록 스켈레톤 생성. Claude가 turn별 발언을 진행.</td>
+      <td><code>afterglow_interview</code></td>
+      <td><code>/afterglow interview &lt;slug&gt; --action start|add-question|answer|gap-check|suggest-questions|attach|transcribe|review|annotate|export-sheet|import-answers|status|list|inspect|finalize|abort|handoff-start|handoff-review|handoff-status|handoff-finalize|handoff-abort</code></td>
+      <td><b>인터뷰 라우터 — 두 흐름.</b> ① <b>인계자 주도 다중 인터뷰</b>: 회차 무제한, <code>gap-check</code>(4신호 갭 자동 감지, LLM 비호출), <code>attach</code>(음성·영상 — 전사본만 RAG 인덱싱), <code>transcribe</code>(WASM whisper), 실시간(<code>mode=sync</code>) 또는 <b>HTML 답변지</b>(<code>mode=async</code> → <code>export-sheet</code>: 체크박스 + 자동저장 → <code>import-answers</code> — 구버전(≤0.12) 답변 JSON·HTML 질문지도 인식해 질문을 자동 등록), <code>finalize</code>(인터뷰어+인터뷰이 <b>이중 서명</b>). 답변은 <code>persona.bio</code> 의 <code>## 인터뷰 보강 #N</code> 블록으로 누적. ② <b>본인 셀프 검수</b>(구 handoff): <code>handoff-start</code> → 질문 keep/edit/decline 검수(<code>handoff-review</code>) → <code>handoff-finalize</code> 본인 서명으로 active 전환, edit/decline 답변은 bio 에 흡수.</td>
     </tr>
     <tr>
-      <td><code>afterglow_history</code></td>
-      <td><code>/afterglow history &lt;slug&gt;</code></td>
-      <td><code>history.log</code>를 시각 / 키워드 / 개수로 필터. <code>--since</code> / <code>--until</code> / <code>--filter</code> / <code>--limit</code> / <code>--json</code> / <code>--reverse</code>.</td>
+      <td><code>afterglow_share</code></td>
+      <td><code>/afterglow share --action export|import|verify</code></td>
+      <td><b>핫플러그 라우터.</b> <code>export</code>(다중 에이전트 번들 + <code>manifest.json</code> + 폴더별 무결성 해시 + <b>Ed25519 서명</b>, TOFU) · <code>import</code>(스키마·서명·무결성 해시·심볼릭링크·프롬프트 인젝션 검증, 변조 번들 거부 — <code>--acceptBrokenChain</code> 강행 시 영구 기록 · <code>provenance.json</code> 출처 추적 · slug 충돌은 <code>--as</code>/<code>--merge</code>) · <code>verify</code>(읽기 전용 사전 점검).</td>
     </tr>
     <tr>
-      <td><code>afterglow_audit</code></td>
-      <td><code>/afterglow audit</code></td>
-      <td>모든 도구 호출이 누적되는 <b>SHA-256 hash-chained audit log</b> 표시 + 체인 무결성 검증. 위변조 시 첫 깨진 seq 식별.</td>
-    </tr>
-    <tr>
-      <td><code>afterglow_recalibrate</code></td>
-      <td><code>/afterglow recalibrate &lt;slug&gt;</code></td>
-      <td><code>history.log</code> 분석 (피드백·거절·low-conf·peer-ask 비율) → <code>confidenceFloor</code> / <code>peerAskThreshold</code> 자동 조정 제안. 기본 dry-run, <code>--apply</code>로 실제 반영. <code>--byTopic</code>은 expertise 별 진단 모드.</td>
-    </tr>
-    <tr>
-      <td><code>afterglow_archive</code></td>
-      <td><code>/afterglow archive &lt;slug&gt; --action archive|restore|list</code></td>
-      <td><code>agents/&lt;slug&gt;/</code> ↔ <code>archive/&lt;slug&gt;/</code> 사이로 폴더를 옮기고 status 를 <b>archived ↔ paused</b> 로 전환. 보관된 에이전트는 <code>ask</code> / <code>council</code> 거부. 복원은 paused 로 진입해 재서명 필요.</td>
-    </tr>
-    <tr>
-      <td><code>afterglow_council_summary</code></td>
-      <td><code>/afterglow council summary [file]</code></td>
-      <td><code>councils/&lt;file&gt;.md</code> 회의록 파싱 → 참가자 · <b>결론</b> · <b>이견</b> · 합의 도달 여부 · ping 흐름 · 발언량을 구조화된 요약으로 출력. 파일 미지정 시 가장 최근 회의록 자동 선택.</td>
-    </tr>
-    <tr>
-      <td><code>afterglow_interview</code> <sub>v0.2</sub></td>
-      <td><code>/afterglow interview &lt;slug&gt; --action start|add-question|answer|gap-check|attach|annotate|status|list|inspect|finalize|abort|transcribe|export-sheet|import-answers</code></td>
-      <td><b>인계자 주도 다중 인터뷰.</b> <code>handoff</code>(본인 1회 셀프검수)와 달리 인계자(인터뷰어)가 퇴사자(인터뷰이)를 <b>회차 무제한</b> 인터뷰. <code>gap-check</code>는 빠진 부분을 4신호로 자동 감지(LLM 비호출), <code>attach</code>는 음성·영상 첨부(transcript만 RAG 인덱싱), <code>annotate</code>는 인터뷰이 부재 시 인계자 주석, <code>finalize</code>는 인터뷰어+인터뷰이 <b>이중 서명</b>. 답변은 <code>persona.bio</code> 의 <code>## 인터뷰 보강 #N</code> 블록으로 누적.</td>
-    </tr>
-    <tr>
-      <td><code>afterglow_export</code> <sub>v0.2</sub></td>
-      <td><code>/afterglow export --slugs jiyoon jaehoon | --all</code></td>
-      <td>하나 이상의 에이전트를 portable <b>번들</b>(폴더 + <code>manifest.json</code> + 폴더별 무결성 해시)로 내보냄. <code>embeddings/</code>는 제외(재생성 가능). 번들을 압축/복사해 다른 사용자에게 전달.</td>
-    </tr>
-    <tr>
-      <td><code>afterglow_import</code> <sub>v0.2</sub></td>
-      <td><code>/afterglow import &lt;path&gt; [--as | --merge | --dryRun | --acceptBrokenChain]</code></td>
-      <td><b>핫플러그.</b> 받은 번들/폴더를 가져와 자동 인식. 스키마·서명·무결성 해시·심볼릭링크·프롬프트 인젝션을 검증하고 <code>provenance.json</code>(출처·신뢰도·전달 이력)을 기록. 서명된 에이전트는 <b>active</b>, 미서명은 <b>paused</b>. slug 충돌은 <code>--as</code>(이름 변경) / <code>--merge</code>(인터뷰 회차만 병합).</td>
-    </tr>
-    <tr>
-      <td><code>afterglow_verify</code> <sub>v0.2</sub></td>
-      <td><code>/afterglow verify &lt;path&gt;</code></td>
-      <td>import 전 <b>읽기 전용</b> 사전 검증. 스키마·서명·무결성·심볼릭링크·인젝션 의심을 체크리스트로 보여주되 로컬 저장소는 건드리지 않음.</td>
-    </tr>
-    <tr>
-      <td><code>afterglow_status</code> <sub>v0.3</sub></td>
-      <td><code>/afterglow status</code></td>
-      <td><b>전체 대시보드.</b> 모든 에이전트의 상태·인터뷰 회차(완료/대기)·검토 대기 미디어·import 출처/신뢰도를 한 번에. 개별 <code>inspect</code> 보완. <code>--json</code>.</td>
-    </tr>
-    <tr>
-      <td><code>afterglow_gc</code> <sub>v0.3</sub></td>
-      <td><code>/afterglow gc --action list|prune-versions|purge-media|purge-archive [--apply]</code></td>
-      <td><b>보존/정리(retention).</b> 오래된 persona 스냅샷 정리(태그 보존) · 인터뷰 미디어 원본 삭제(전사본 유지·GDPR) · 보관함 영구 삭제. 기본 <b>dry-run</b>, <code>--apply</code> 로 실제 삭제.</td>
+      <td><code>afterglow_admin</code></td>
+      <td><code>/afterglow admin --area access|audit|correct|version|gc [--action …]</code></td>
+      <td><b>운영/거버넌스 라우터 (area → action 2단).</b> <code>access</code>(<code>user:</code>/<code>role:</code>/<code>team:</code> allow/deny + default 정책 + <code>check</code> 시뮬레이션) · <code>audit</code>(SHA-256 hash-chained 로그 + 무결성 검증 + checkpoint/fast 증분) · <code>correct</code>(feedback · edit-answer · save-rule · <b>record-answer</b> 답변 회수 저장 · <b>data-subject-export</b> 데이터 주체 종합 덤프 · list) · <code>version</code>(자동/수동 스냅샷 · diff · rollback · tag) · <code>gc</code>(스냅샷 prune · 미디어 purge · 보관함 영구삭제 — 기본 dry-run, <code>--apply</code>).</td>
     </tr>
   </tbody>
 </table>
@@ -257,6 +164,8 @@ sequenceDiagram
 > v0.4 에서 RAG 랭킹이 <b>BM25</b> 로 업그레이드(+ opt-in <b>dense-vector</b> 백엔드 `AFTERGLOW_RAG_BACKEND=dense`), <code>transcribe</code> 에 <b>--download/--list-models</b>(ggml 모델 관리)가 추가됐습니다.
 >
 > v0.8 에서 <b>WASM whisper 엔진</b>(<code>transcribe --apply</code>, `@xenova/transformers` optionalDependency — 네이티브 빌드 불필요), <b>하이브리드 RAG 재랭킹</b>(dense+lexical RRF 융합), 전사본 <b>PII 마스킹</b>(`AFTERGLOW_PII_REDACT=1`)·<b>저장 암호화</b>(`AFTERGLOW_ENCRYPTION_KEY`, AES-256-GCM), <code>interview start</code> 의 <b>자동 질문 제안</b>(진행 여부 자동 질의)이 추가됐습니다.
+>
+> v0.13 에서 <code>import-answers</code> 가 <b>구버전(≤0.12) 산출물을 재활용</b>합니다 — 옛 답변 JSON(<code>{…, answers:[{id, title, declined, answer}]}</code>)은 회차에 없는 질문을 제목으로 <b>자동 등록(backfill)</b> 하며 반영되고, 구버전 HTML 질문지는 질문 전문을 회차에 심어(seed) 이어 넣는 답변 JSON 이 같은 id 로 매칭됩니다.
 
 <details>
 <summary><b>입력 스키마 자세히 보기</b></summary>
@@ -272,6 +181,7 @@ sequenceDiagram
 | `bio` | `string` | | 한 줄 소개 |
 | `expertise` | `Expertise[]` | | 디자인 · 개발 · 연구 · 사업화 · 영업 · 마케팅 · 운영 · 인사 · 법무 · 재무 · 데이터 중 다중 선택 |
 | `sources` | `string[]` | | 학습 자료 파일 경로 또는 URL |
+| `signer` | `string` | | 주면 만들면서 바로 서명 → **active** (생략 시 draft) |
 | `mcpAllow` | `string[]` | | 이 에이전트가 호출 가능한 MCP (기본 `[filesystem]`) |
 | `mcpDeny` | `string[]` | | 명시 거부할 MCP |
 
@@ -279,9 +189,11 @@ sequenceDiagram
 
 | 필드 | 타입 | 필수 | 설명 |
 | --- | --- | --- | --- |
-| `slug` | `string` | ✓ | 질문 받을 에이전트 |
+| `slug` | `string` | ✓* | 질문 받을 에이전트 (*`slugs` 를 쓰면 생략) |
+| `slugs` | `string[]` | | 2–6명 **합동 세션** (구 council) — `slug` 대신 사용 |
 | `question` | `string` | ✓ | 질문 |
 | `topK` | `number` | | RAG 결과 청크 개수 (1–12, 기본 4) |
+| `caller` | `string` | | 호출자 (`user:`/`role:`/`team:`) — access 정책이 deny 면 필수 |
 
 </details>
 
@@ -320,7 +232,7 @@ claude /afterglow interview jiyoon --action finalize --session 001-결제-fallba
 ```
 
 - **인터뷰이 부재**(이미 퇴사·연락 불가)면 `--action start --intervieweeAbsent` 로 **annotation(인계자 주석)** 모드. 단, 퇴사자가 handoff 단계에서 `--allowProxyAnnotation` 으로 사전 동의했어야 합니다. 주석은 "인계자 추정 ⚠(미확인)" 으로 신뢰도를 낮춰 반영됩니다.
-- **handoff → interview 브릿지**: `handoff finalize --allowFollowupInterview --allowProxyAnnotation --followupScope "결제·온보딩 한정"` 으로 본인이 미래 인터뷰를 사전 허용/제한할 수 있습니다.
+- **handoff → interview 브릿지**: `interview --action handoff-finalize --allowFollowupInterview --allowProxyAnnotation --followupScope "결제·온보딩 한정"` 으로 본인이 미래 인터뷰를 사전 허용/제한할 수 있습니다.
 - **전사(transcription)**: 코어는 "추가 GPU·API 0원" 약속을 위해 STT 를 Tier 로 분리합니다 — 직접 전사본 첨부(Tier 0), **WASM whisper**(Tier 1a, `@xenova/transformers` optionalDependency · 네이티브 빌드 불필요), native `whisper.cpp`(Tier 1b), 외부 STT(Tier 2, 옵트인). `--action transcribe --apply` 는 `AFTERGLOW_WHISPER_ENGINE`(기본 `auto`=WASM→native)에 따라 실행하고, model 은 최초 1회 자동 다운로드합니다. 결과는 Claude polish(`--text`)로 다듬어 저장할 수 있습니다.
 
 ## 🔌 핫플러그 — export / import
@@ -330,8 +242,8 @@ claude /afterglow interview jiyoon --action finalize --session 001-결제-fallba
 ```bash
 # ── 보내는 사람 ──────────────────────────────────────────
 # 여러 명을 한 번에 번들로 내보내기
-claude /afterglow export --slugs jiyoon jaehoon --exportedBy "이지윤"
-#   또는 전부:  claude /afterglow export --all
+claude /afterglow share export --slugs jiyoon jaehoon --exportedBy "이지윤"
+#   또는 전부:  claude /afterglow share export --all
 
 # 결과:
 #   ✦ 2 명 에이전트 번들 생성 완료.
@@ -345,8 +257,8 @@ claude /afterglow export --slugs jiyoon jaehoon --exportedBy "이지윤"
 ```bash
 # ── 받는 사람 ──────────────────────────────────────────
 # (압축이면 먼저 풀고) 검증 → 가져오기
-claude /afterglow verify ./afterglow-export-2026-…/      # 읽기 전용 사전 점검
-claude /afterglow import ./afterglow-export-2026-…/ \
+claude /afterglow share verify ./afterglow-export-2026-…/      # 읽기 전용 사전 점검
+claude /afterglow share import ./afterglow-export-2026-…/ \
   --importedBy "김후임" --from "이지윤" --trustSigner "이지윤"
 
 # 결과:
@@ -376,7 +288,6 @@ import 가 자동으로 확인하는 것:
 ├─ config.yml                ← 환경 설정 (embedding model · storage root)
 ├─ registry.json             ← 전체 에이전트 인덱스
 ├─ audit.log                 ← SHA-256 hash-chained 도구 호출 로그
-├─ councils/                 ← council + peer-ask 회의록 (markdown)
 ├─ archive/                  ← 보관(archived)된 에이전트 폴더 (restore 시 agents/ 로 복귀)
 └─ agents/<slug>/
    ├─ persona.json           ← zod 검증된 페르소나
@@ -384,13 +295,13 @@ import 가 자동으로 확인하는 것:
    ├─ mcp-allowlist.yml      ← (예약) 에이전트별 MCP 권한
    ├─ consent.md             ← 서명 → status draft → active
    ├─ history.log            ← 호출 / 피드백 / 수정 누적
-   ├─ access.json            ← 호출 권한 정책 (afterglow_access)
-   ├─ handoff.json           ← 본인 인계 세션 (afterglow_handoff)
+   ├─ access.json            ← 호출 권한 정책 (admin access)
+   ├─ handoff.json           ← 본인 인계 세션 (interview handoff-*)
    ├─ followup.json          ← 추가 인터뷰 사전 동의 (handoff → interview 브릿지)
    ├─ provenance.json        ← 출처·신뢰도·전달 이력 (import 시 기록)
-   ├─ corrections.log        ← 사용자 보정 누적 (afterglow_correct)
-   ├─ .versions/             ← persona 스냅샷 (afterglow_version)
-   ├─ interviews/            ← 다중 인터뷰 (afterglow_interview)
+   ├─ corrections.log        ← 사용자 보정 누적 (admin correct)
+   ├─ .versions/             ← persona 스냅샷 (admin version)
+   ├─ interviews/            ← 다중 인터뷰 (interview)
    │  ├─ index.json          ← 회차 인덱스
    │  └─ <NNN-제목>/
    │     ├─ session.json     ← 질문·답변·서명
@@ -406,7 +317,7 @@ import 가 자동으로 확인하는 것:
 | 변수 | 기본값 | 용도 |
 | --- | --- | --- |
 | `AFTERGLOW_ROOT` | `~/.claude/afterglow` | 모든 데이터의 루트. 테스트 / dev 환경 격리 시 임시 폴더 지정. |
-| `AFTERGLOW_ALLOW_DRAFT` | unset | `1` 로 설정 시 `ask` / `council`의 active 게이트 우회. 테스트/디버그 전용. |
+| `AFTERGLOW_ALLOW_DRAFT` | unset | `1` 로 설정 시 `ask` 의 active 게이트 우회. 테스트/디버그 전용. |
 | `AFTERGLOW_RAG_BACKEND` | `lexical` | `dense` 로 설정 시 임베딩 백엔드 사용 (`AFTERGLOW_EMBED_ENDPOINT` 필요, 실패 시 lexical 폴백). |
 | `AFTERGLOW_RAG_HYBRID` | on (dense 일 때) | `off` 로 설정 시 dense 단독. 기본은 dense + lexical 의 **RRF 하이브리드 재랭킹**. |
 | `AFTERGLOW_EMBED_ENDPOINT` / `AFTERGLOW_EMBED_KEY` / `AFTERGLOW_EMBED_MODEL` | unset / unset / `text-embedding-3-small` | OpenAI 호환 `/embeddings` 엔드포인트·키·모델 (dense 백엔드). |
@@ -423,8 +334,8 @@ git clone https://github.com/DaeSeokSong/Afterglow.git
 cd Afterglow/server
 npm install
 npm run build              # tsc → dist/
-npm test                   # vitest (323 tests — +usability 10 +v10 12 +acl-record 8, etc.)
-npm run test:stdio         # 실제 MCP stdio 핸드셰이크 (26 도구 모두 happy-path + v0.3 기능 라운드트립)
+npm test                   # vitest (321 tests)
+npm run test:stdio         # 실제 MCP stdio 핸드셰이크 (8 도구 + 모든 액션 패밀리 라운드트립)
 npm run test:all           # 전체 (unit → build → stdio)
 ```
 
@@ -441,37 +352,28 @@ server/
 │  ├─ rag.ts            ← BM25 chunk retrieval + 근거 게이트 (knowledge/ + interviews/ 전사본)
 │  ├─ audit.ts          ← SHA-256 hash-chained immutable log
 │  └─ tools/
-│     ├─ init.ts
-│     ├─ create.ts
-│     ├─ sign.ts
-│     ├─ resume.ts          ← consent gate 우회 1-step 재활성화
-│     ├─ handoff.ts         ← 본인 인계 모드 (start/review/status/finalize/abort)
-│     ├─ list.ts
-│     ├─ inspect.ts
-│     ├─ ask.ts             ← caller 인자 시 access 정책 체크
-│     ├─ edit.ts            ← 변경 전 자동 스냅샷
-│     ├─ council.ts
-│     ├─ council_summary.ts
-│     ├─ history.ts
-│     ├─ audit.ts
-│     ├─ recalibrate.ts     ← global + by-topic (expertise-aware) + 자동 스냅샷
-│     ├─ correct.ts         ← feedback / edit-answer / save-rule
-│     ├─ archive.ts         ← archive / restore / list
-│     ├─ version.ts         ← list / diff / rollback / tag / snapshot
-│     ├─ access.ts          ← user:/role:/team: allow/deny + check
-│     ├─ interview.ts       ← 다중 인터뷰 + 갭 감지 + 미디어 첨부 + 이중 서명
-│     ├─ export.ts          ← 다중 에이전트 번들 내보내기
-│     ├─ import.ts          ← 핫플러그 가져오기 + 무결성/인젝션 검증 + provenance
-│     ├─ verify.ts          ← 읽기 전용 번들 사전 검증
+│     │                     ── 노출되는 8 도구 ──
+│     ├─ guide.ts           ← 상태별 시작 안내
+│     ├─ create.ts          ← 자동 init + (--signer 시) 자동 서명
+│     ├─ learn.ts           ← 자료 추가 (텍스트/파일/폴더/URL)
+│     ├─ ask.ts             ← 단독 + 합동(slugs) 질문 · 근거 게이트 · access 정책 체크
+│     ├─ agent.ts           ← 라우터: list/status/inspect/edit/sign/resume/archive/restore/history/init
+│     ├─ interview.ts       ← 다중 인터뷰 + handoff-* 셀프검수 위임
+│     ├─ share.ts           ← 라우터: export/import/verify
+│     ├─ admin.ts           ← 2단 라우터: access/audit/correct/version/gc
+│     │                     ── 라우터가 재사용하는 구현 (구 개별 도구) ──
+│     ├─ init.ts · sign.ts · resume.ts · list.ts · status.ts · inspect.ts
+│     ├─ edit.ts · history.ts · archive.ts · handoff.ts
+│     ├─ export.ts · import.ts · verify.ts
+│     ├─ access.ts · audit.ts · correct.ts · version.ts · gc.ts
+│     ├─ elicit.ts          ← 누락 인자 번호-메뉴 안내
+│     ├─ acl.ts             ← mutator per-tool ACL
 │     └─ types.ts           ← ToolReply + safe() 래퍼
-├─ test/
-│  ├─ storage.test.ts   ← vitest (12 tests)
-│  ├─ tools.test.ts     ← vitest (29 tests — v0.1.1 도구 + RAG + 엣지케이스)
-│  ├─ phase4.test.ts    ← vitest (33 tests — archive / council_summary / by-topic / resume + 회귀)
-│  ├─ phase6.test.ts    ← vitest (71 tests — handoff / version / access / correct + P0 보안 회귀)
-│  ├─ interview.test.ts ← vitest (23 tests — 인터뷰 전 흐름 + 갭/첨부/주석/이중서명 + 보안)
-│  ├─ portable.test.ts  ← vitest (16 tests — export/import/verify 라운드트립 + 변조/인젝션/충돌)
-│  └─ stdio.smoke.mjs   ← 실제 MCP stdio 핸드셰이크 (26 도구 + 기능 라운드트립)
+├─ test/                    ← vitest 321 tests (21 파일)
+│  ├─ restructure.test.ts   ← v0.13 라우팅 (agent/share/admin 라우터 · ask multi · handoff-*)
+│  ├─ grounding.test.ts     ← 할루시네이션 방지 QA (빈자료/무관/부분/인젝션/dense/합동)
+│  ├─ tools · storage · phase4 · phase6 · interview · portable · usability … 
+│  └─ stdio.smoke.mjs       ← 실제 MCP stdio 핸드셰이크 (8 도구 + 액션 패밀리 라운드트립)
 ├─ tsconfig.json
 ├─ vitest.config.ts
 └─ package.json
@@ -499,7 +401,7 @@ export async function retrieve(slug: string, query: string, topK = 4): Promise<R
 | **RAG 인덱싱** | `.md`/`.txt`/`.csv`/`.jsonl` 만 — PDF/PPT 미지원 | 외부 추출 후 `.md` 로 변환 |
 | **`audit.log` 스케일** | 매 verify 마다 전체 read + 해시 재계산 | 수만 줄 누적 시 분할 / 체크포인트 필요 |
 | **`.versions/` 보존** | 모든 edit/sign/handoff/rollback 이 영구 스냅샷 | 정기적 수동 정리 (`rm` + `tags.json` 동기화) |
-| **`afterglow_correct` 권한** | `access.json` 은 `ask` 에만 적용 | 운영 시 wrapper 로 per-tool ACL 추가 |
+| **mutator per-tool ACL** | `admin correct`·`agent edit`·`admin version`·`interview`(변경 액션)·`agent archive/restore`·`admin gc` 가 `caller` + access 정책 적용 — 단 `share import` 는 예외(새 에이전트 생성) | import 용 전역 allowlist |
 | **GDPR 삭제** | `archive` 는 `archive/<slug>/` 로 이동만 | 만료 후 수동 `rm -rf` + registry 정리 |
 | **다중 프로세스** | in-process lock 만 — 단일 stdio 서버 가정 | 분산 운영 시 외부 mutex (Redis/DB) |
 | **사이드 로그 무결성** | `audit.log` 만 해시 체인 | `history.log` / `consent.md` 등도 hash → audit meta |
@@ -509,19 +411,19 @@ export async function retrieve(slug: string, query: string, topK = 4): Promise<R
 
 ## 🗺 Roadmap
 
-- [x] 26 도구 전부 출시: **guide · learn** + …22개… · interview · export · import · verify · status · gc
+- [x] 도구 8개: **`guide`** · **`create`** · **`learn`** · **`ask`** · `agent` · `interview` · `share` · `admin` — ≤0.12 의 모든 기능이 action 으로 유지
+- [x] **대대적 단순화(v0.13)** — 도구 표면 26 → 8 통합 (council → `ask --slugs` 흡수, council_summary/recalibrate 삭제, action/area 누락 시 번호 메뉴)
 - [x] **사용성(v0.11)** — `guide`(상태별 시작 안내) · `learn`(자료 추가, 숨은 폴더 불필요) · `create --signer`(자동 init+활성화 → 핵심 3단계 create→learn→ask)
-- [x] **근거 기반/할루시네이션 방지(v0.12)** — ask/council 에 grounding contract + 충족도 게이트(없음/매우부족/부분/충분) · 신뢰도 버그 수정 · 한국어 조사 제거 검색 · 다각도 QA 증명
+- [x] **근거 기반/할루시네이션 방지(v0.12)** — ask(단독·합동)에 grounding contract + 충족도 게이트(없음/매우부족/부분/충분) · 신뢰도 버그 수정 · 한국어 조사 제거 검색 · 다각도 QA 증명
 - [x] zod 스키마 + 시스템 프롬프트 자동 렌더링
 - [x] 렉시컬 RAG — BM25 (오프라인 · 외부 의존성 0) — `knowledge/` + 인터뷰 전사본
 - [x] SHA-256 hash-chained 감사 로그 + 무결성 검증
 - [x] consent.md 서명 워크플로우 (draft → active 게이트)
-- [x] 신뢰도 보정: 전역 + **expertise-aware by-topic** 진단
-- [x] **`afterglow_archive`** — 에이전트 보관 / 복원
-- [x] **Council moderator** — 강화된 합의 감지 + `afterglow_council_summary` 자동 요약
+- [x] **보관 / 복원** (`agent --action archive|restore`)
+- [x] **합동 ask** (`ask --slugs`, 구 council) — moderator 합의 규칙 + 참가자별 근거 판정
 - [x] **다중 인터뷰 + 갭 자동 감지 + 음성·영상 첨부** (`afterglow_interview`)
-- [x] **핫플러그** — 다중 에이전트 export/import + 무결성·인젝션 검증 + provenance (`afterglow_export · import · verify`)
-- [x] **전체 대시보드 `afterglow_status`** + **보존/정리 `afterglow_gc`**(스냅샷 prune·미디어 purge·보관함 삭제)
+- [x] **핫플러그** — 다중 에이전트 export/import + 무결성·인젝션 검증 + provenance (`share --action export|import|verify`)
+- [x] **전체 대시보드** (`agent --action status`) + **보존/정리** (`admin --area gc` — 스냅샷 prune·미디어 purge·보관함 삭제)
 - [x] **전사 `transcribe`**(로컬 whisper `--apply` / Claude polish `--text`) + **suggest-questions**(회차 전 질문 제안) + **review**(검토 후 인덱싱)
 - [x] **import `--expectAnchor`**(번들 위변조 탐지) + **audit checkpoint**(대용량 증분 검증)
 - [x] **BM25 RAG** + opt-in **dense-vector 백엔드** (`AFTERGLOW_RAG_BACKEND=dense`, embeddings/ 캐시)
@@ -532,8 +434,9 @@ export async function retrieve(slug: string, query: string, topK = 4): Promise<R
 - [x] **신규 인터뷰 자동 질문 제안** — `interview start` 에 4-신호 갭 분석 + "진행할까요?" 자동 질문 동봉 (`suggest=false` 로 해제)
 - [x] **인자 자동 안내(elicitation)** — 필수 인자 누락 시 번호 선택지 + `[필수]`/`[선택]` 표기로 안내 (필수 인자 있는 도구 전체). 스키마는 optional + handler 에서 검증/안내
 - [x] **인터뷰 진행 방식 선택** — 실시간(`mode=sync`·`answer`) / 파일 기반(`mode=async` → `export-sheet`(기본 HTML 폼 · 체크박스 · localStorage 자동저장 / `--format md` 옵션) → 채움 → `import-answers` JSON·MD 자동 감지)
-- [x] **MCP prompts → 슬래시 명령** `/mcp__afterglow__<이름>` (26종 — 도구 전부 1:1, `afterglow:` 입력→Tab, 인자 자동완성)
-- [x] vitest 323개 + 26 도구 stdio 핸드셰이크 (prompts 포함)
+- [x] **구버전 답변지 재활용(v0.13)** — `import-answers` 가 ≤0.12 답변 JSON(질문 없으면 제목으로 backfill)·구버전 HTML 질문지(질문 전문 seed)도 인식
+- [x] **MCP prompts → 슬래시 명령** `/mcp__afterglow__<이름>` (8종 — 도구 전부 1:1, `afterglow:` 입력→Tab, 인자 자동완성)
+- [x] vitest 321개 + 8 도구 stdio 핸드셰이크 (액션 라우팅 · prompts 포함)
 - [ ] per-tool ACL · Web companion · 정기 retention 자동화
 - [ ] knowledge 파일까지 확장한 일괄 암호화/복호화 도구 · 외부 STT(Tier 2) 어댑터
 

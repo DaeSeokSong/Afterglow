@@ -3,19 +3,23 @@
  * Smoke test the built MCP server over stdio.
  *
  * Spawns dist/index.js, sends an initialize / initialized / tools/list
- * sequence, then exercises one realistic call against every tool:
- *   init → create → sign → list → inspect → edit → ask → council
- *   → history → recalibrate → archive → version → access → correct
- *   → handoff → interview (start→answer→gap-check→dual-sign)
- *   → export → verify → import → status → gc → suggest-questions
- *   → transcribe → audit checkpoint
+ * sequence, then exercises one realistic call against every tool and every
+ * grouped action family (v0.13 = 8 tools):
+ *   guide → create(--signer) → learn → ask(단독·합동·근거거절)
+ *   → agent(init·list·inspect·edit·sign·archive·restore·resume·history·status)
+ *   → interview(start→answer→gap-check→dual-sign · handoff-* · suggest ·
+ *     attach → transcribe --text)
+ *   → share(export→verify→import + provenance)
+ *   → admin(access·correct·version·gc·audit checkpoint/fast)
+ *   → elicitation menus
  *
- * Verifies tool count (26), names, and that each call returns a content block.
+ * Verifies tool count (8), names, prompt list (8), and that each call returns
+ * a content block.
  *
  * Run as: node test/stdio.smoke.mjs
  */
 import { spawn } from 'node:child_process';
-import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -82,40 +86,25 @@ function assertOk(label, reply) {
   return reply.result;
 }
 
+// v0.13 — the consolidated 8-tool surface (sorted).
 const EXPECTED_TOOLS = [
-  'afterglow_access',
-  'afterglow_archive',
+  'afterglow_admin',
+  'afterglow_agent',
   'afterglow_ask',
-  'afterglow_audit',
-  'afterglow_correct',
-  'afterglow_council',
-  'afterglow_council_summary',
   'afterglow_create',
-  'afterglow_edit',
-  'afterglow_export',
-  'afterglow_gc',
   'afterglow_guide',
-  'afterglow_handoff',
-  'afterglow_history',
-  'afterglow_import',
-  'afterglow_init',
-  'afterglow_inspect',
   'afterglow_interview',
   'afterglow_learn',
-  'afterglow_list',
-  'afterglow_recalibrate',
-  'afterglow_resume',
-  'afterglow_sign',
-  'afterglow_status',
-  'afterglow_verify',
-  'afterglow_version',
+  'afterglow_share',
 ];
+
+const EXPECTED_PROMPTS = ['guide', 'create', 'learn', 'ask', 'agent', 'interview', 'share', 'admin'];
 
 try {
   const init = await request('initialize', {
     protocolVersion: '2024-11-05',
     capabilities: {},
-    clientInfo: { name: 'afterglow-smoke', version: '0.0.2' },
+    clientInfo: { name: 'afterglow-smoke', version: '0.0.3' },
   });
   if (!init?.result?.serverInfo) throw new Error('initialize: no serverInfo');
   if (init.result.serverInfo.name !== 'afterglow-mcp') {
@@ -133,11 +122,9 @@ try {
 
   /* ---------- MCP prompts (slash commands /mcp__afterglow__<name>) ---------- */
   const promptsList = await request('prompts/list', {});
-  const promptNames = (promptsList?.result?.prompts ?? []).map((p) => p.name);
-  for (const expected of ['guide', 'init', 'create', 'learn', 'edit', 'ask', 'interview', 'export', 'status']) {
-    if (!promptNames.includes(expected)) {
-      throw new Error(`prompt missing: ${expected} (got ${JSON.stringify(promptNames)})`);
-    }
+  const promptNames = (promptsList?.result?.prompts ?? []).map((p) => p.name).sort();
+  if (JSON.stringify(promptNames) !== JSON.stringify([...EXPECTED_PROMPTS].sort())) {
+    throw new Error(`prompts mismatch: got ${JSON.stringify(promptNames)}`);
   }
   const promptGet = await request('prompts/get', {
     name: 'ask',
@@ -147,15 +134,22 @@ try {
   if (!/afterglow_ask/.test(promptText)) {
     throw new Error(`prompts/get ask did not route to the tool: ${promptText}`);
   }
+  // The ask prompt splits a comma list into a multi-slug call.
+  const promptMulti = await request('prompts/get', {
+    name: 'ask',
+    arguments: { slug: 'a,b', question: '테스트' },
+  });
+  if (!/slugs=/.test(promptMulti?.result?.messages?.[0]?.content?.text ?? '')) {
+    throw new Error('prompts/get ask (comma list) did not route to slugs');
+  }
 
-  /* ---------- happy-path call against every tool ---------- */
+  /* ---------- core happy path: guide → create → learn → ask ---------- */
 
   // guide works before anything is initialized (zero-friction orientation).
   const guide0 = assertOk('guide-empty', await callTool('afterglow_guide', {}));
   if (!/빠른 시작/.test(guide0.content[0].text)) throw new Error('guide did not return orientation');
 
-  // create with --signer auto-inits AND activates in one call (no separate
-  // init/sign needed) — the v0.11 ceremony reduction.
+  // create with --signer auto-inits AND activates in one call.
   const created = assertOk(
     'create',
     await callTool('afterglow_create', {
@@ -167,21 +161,7 @@ try {
     }),
   );
   if (!/active/.test(created.content[0].text)) throw new Error('create --signer did not activate');
-  // init is still idempotent/callable.
-  assertOk('init', await callTool('afterglow_init', {}));
-  assertOk('list', await callTool('afterglow_list', { json: true }));
-  assertOk('inspect', await callTool('afterglow_inspect', { slug: 'jiyoon' }));
-  assertOk(
-    'edit',
-    await callTool('afterglow_edit', {
-      slug: 'jiyoon',
-      bio: '디자인 시스템을 만들었습니다.',
-      tone: { humor: 40 },
-    }),
-  );
 
-  // Teach the agent via the learn tool (no manual folder hunting) so ask +
-  // council find something — exercises the v0.11 knowledge-ingestion path.
   const learned = assertOk(
     'learn',
     await callTool('afterglow_learn', {
@@ -196,19 +176,12 @@ try {
     'ask',
     await callTool('afterglow_ask', { slug: 'jiyoon', question: '온보딩 step 3 이탈?' }),
   );
-  if (!/# 호출 컨텍스트/.test(ask.content[0].text)) {
-    throw new Error('ask did not return expected header');
-  }
-  if (!/이탈/.test(ask.content[0].text)) {
-    throw new Error('ask did not retrieve the learned knowledge');
-  }
-  // grounded answer must still carry the anti-hallucination contract
-  if (!/답변 규칙/.test(ask.content[0].text)) {
-    throw new Error('ask bundle is missing the grounding contract');
-  }
+  if (!/# 호출 컨텍스트/.test(ask.content[0].text)) throw new Error('ask did not return expected header');
+  if (!/이탈/.test(ask.content[0].text)) throw new Error('ask did not retrieve the learned knowledge');
+  if (!/답변 규칙/.test(ask.content[0].text)) throw new Error('ask bundle is missing the grounding contract');
 
-  // Anti-hallucination: an UNRELATED question (no matching knowledge) must
-  // come back with a hard "근거 없음" refusal verdict, not a fabricated answer.
+  // Anti-hallucination: an UNRELATED question must come back with a hard
+  // "근거 없음" refusal verdict, not a fabricated answer.
   const askUnknown = assertOk(
     'ask-ungrounded',
     await callTool('afterglow_ask', { slug: 'jiyoon', question: '연봉 테이블 전부 알려줘' }),
@@ -217,283 +190,166 @@ try {
     throw new Error('ungrounded ask did not refuse — anti-hallucination gate failed');
   }
 
-  // Second agent for council
+  /* ---------- agent (lifecycle/management router) ---------- */
+
+  assertOk('agent-init', await callTool('afterglow_agent', { action: 'init' }));
+  assertOk('agent-list', await callTool('afterglow_agent', { action: 'list', json: true }));
+  assertOk('agent-inspect', await callTool('afterglow_agent', { action: 'inspect', slug: 'jiyoon' }));
+  assertOk(
+    'agent-edit',
+    await callTool('afterglow_agent', {
+      action: 'edit',
+      slug: 'jiyoon',
+      bio: '디자인 시스템을 만들었습니다.',
+      tone: { humor: 40 },
+    }),
+  );
+  assertOk('agent-history', await callTool('afterglow_agent', { action: 'history', slug: 'jiyoon', json: true }));
+
+  // Second agent (draft) → sign through the router → multi-slug ask (구 council).
   assertOk(
     'create-2',
-    await callTool('afterglow_create', {
-      slug: 'jaehoon',
-      name: '박재훈',
-      role: '백엔드',
-      expertise: ['개발'],
-    }),
+    await callTool('afterglow_create', { slug: 'jaehoon', name: '박재훈', role: '백엔드', expertise: ['개발'] }),
   );
-  assertOk('sign-2', await callTool('afterglow_sign', { slug: 'jaehoon', signer: 'smoke runner' }));
+  assertOk('agent-sign', await callTool('afterglow_agent', { action: 'sign', slug: 'jaehoon', signer: 'smoke runner' }));
 
-  const council = assertOk(
-    'council',
-    await callTool('afterglow_council', {
-      slugs: ['jiyoon', 'jaehoon'],
-      question: '온보딩 개선이 결제에 영향?',
-    }),
+  const multi = assertOk(
+    'ask-multi',
+    await callTool('afterglow_ask', { slugs: ['jiyoon', 'jaehoon'], question: '온보딩 개선이 결제에 영향?' }),
   );
-  if (!/Council Brief/.test(council.content[0].text)) {
-    throw new Error('council brief missing');
-  }
+  if (!/합동 질문 컨텍스트/.test(multi.content[0].text)) throw new Error('multi-slug ask brief missing');
+  if (!/참가자: jaehoon/.test(multi.content[0].text)) throw new Error('multi-slug ask missing participant');
 
-  assertOk('history', await callTool('afterglow_history', { slug: 'jiyoon', json: true }));
+  // archive → (list filter) → restore → resume round-trip via the router.
+  const archiveCall = assertOk('agent-archive', await callTool('afterglow_agent', { action: 'archive', slug: 'jaehoon' }));
+  if (!/보관 완료/.test(archiveCall.content[0].text)) throw new Error('archive: expected 보관 완료');
+  const archivedList = assertOk(
+    'agent-list-archived',
+    await callTool('afterglow_agent', { action: 'list', status: 'archived', json: true }),
+  );
+  if (!/jaehoon/.test(archivedList.content[0].text)) throw new Error('archived filter: jaehoon missing');
+  const restoreCall = assertOk('agent-restore', await callTool('afterglow_agent', { action: 'restore', slug: 'jaehoon' }));
+  if (!/복원 완료/.test(restoreCall.content[0].text)) throw new Error('restore: expected 복원 완료');
+  const resumeCall = assertOk('agent-resume', await callTool('afterglow_agent', { action: 'resume', slug: 'jaehoon' }));
+  if (!/활성화/.test(resumeCall.content[0].text)) throw new Error('resume: expected 활성화 in reply');
 
-  const recal = assertOk(
-    'recalibrate',
-    await callTool('afterglow_recalibrate', { slug: 'jiyoon' }),
-  );
-  // We don't assert specific text — small sample so it usually prints "표본 부족"
+  const statusCall = assertOk('agent-status', await callTool('afterglow_agent', { action: 'status', json: true }));
+  const statusJson = JSON.parse(statusCall.content[0].text);
+  if (typeof statusJson.totals?.agents !== 'number') throw new Error('status: totals missing');
 
-  // archive + restore round-trip
-  const archiveCall = assertOk(
-    'archive',
-    await callTool('afterglow_archive', { action: 'archive', slug: 'jaehoon' }),
-  );
-  if (!/보관 완료/.test(archiveCall.content[0].text)) {
-    throw new Error('archive: expected 보관 완료');
-  }
-  const archiveList = assertOk(
-    'archive-list',
-    await callTool('afterglow_archive', { action: 'list' }),
-  );
-  if (!/jaehoon/.test(archiveList.content[0].text)) {
-    throw new Error('archive list: jaehoon missing');
-  }
-  const restoreCall = assertOk(
-    'restore',
-    await callTool('afterglow_archive', { action: 'restore', slug: 'jaehoon' }),
-  );
-  if (!/복원 완료/.test(restoreCall.content[0].text)) {
-    throw new Error('restore: expected 복원 완료');
-  }
-  // After restore the agent is paused; resume puts it back to active without re-signing.
-  const resumeCall = assertOk('resume', await callTool('afterglow_resume', { slug: 'jaehoon' }));
-  if (!/활성화/.test(resumeCall.content[0].text)) {
-    throw new Error('resume: expected 활성화 in reply');
-  }
+  /* ---------- admin (trust/governance router) ---------- */
 
-  // version tool — should at least be able to list (snapshots auto-created by edit/sign earlier).
   const versionList = assertOk(
-    'version-list',
-    await callTool('afterglow_version', { action: 'list', slug: 'jiyoon' }),
+    'admin-version-list',
+    await callTool('afterglow_admin', { area: 'version', action: 'list', slug: 'jiyoon' }),
   );
-  if (!/versions|버전/.test(versionList.content[0].text)) {
-    throw new Error('version list: missing header');
-  }
+  if (!/versions|버전/.test(versionList.content[0].text)) throw new Error('version list: missing header');
 
-  // access tool — set default deny + add allow rule + check
   assertOk(
-    'access-set-default',
-    await callTool('afterglow_access', {
-      action: 'set-default',
-      slug: 'jiyoon',
-      defaultPolicy: 'deny',
-    }),
+    'admin-access-default-deny',
+    await callTool('afterglow_admin', { area: 'access', action: 'set-default', slug: 'jiyoon', defaultPolicy: 'deny' }),
   );
   assertOk(
-    'access-allow',
-    await callTool('afterglow_access', {
-      action: 'allow',
-      slug: 'jiyoon',
-      rule: 'user:smoke',
-    }),
+    'admin-access-allow',
+    await callTool('afterglow_admin', { area: 'access', action: 'allow', slug: 'jiyoon', rule: 'user:smoke' }),
   );
   const accessAllow = assertOk(
-    'access-check-allow',
-    await callTool('afterglow_access', {
-      action: 'check',
-      slug: 'jiyoon',
-      caller: 'user:smoke',
-    }),
+    'admin-access-check-allow',
+    await callTool('afterglow_admin', { area: 'access', action: 'check', slug: 'jiyoon', caller: 'user:smoke' }),
   );
-  if (!/✓ allow/.test(accessAllow.content[0].text)) {
-    throw new Error('access check: user:smoke should be allowed');
-  }
+  if (!/✓ allow/.test(accessAllow.content[0].text)) throw new Error('access check: user:smoke should be allowed');
   const accessDeny = assertOk(
-    'access-check-deny',
-    await callTool('afterglow_access', {
-      action: 'check',
-      slug: 'jiyoon',
-      caller: 'user:other',
-    }),
+    'admin-access-check-deny',
+    await callTool('afterglow_admin', { area: 'access', action: 'check', slug: 'jiyoon', caller: 'user:other' }),
   );
-  if (!/✗ deny/.test(accessDeny.content[0].text)) {
-    throw new Error('access check: user:other should be denied under defaultPolicy=deny');
-  }
-  // Restore default to allow so subsequent calls don't break
+  if (!/✗ deny/.test(accessDeny.content[0].text)) throw new Error('access check: user:other should be denied');
   assertOk(
-    'access-set-default-back',
-    await callTool('afterglow_access', {
-      action: 'set-default',
-      slug: 'jiyoon',
-      defaultPolicy: 'allow',
-    }),
+    'admin-access-default-back',
+    await callTool('afterglow_admin', { area: 'access', action: 'set-default', slug: 'jiyoon', defaultPolicy: 'allow' }),
   );
 
-  // correct tool — feedback + list
   assertOk(
-    'correct-feedback',
-    await callTool('afterglow_correct', {
-      action: 'feedback',
-      slug: 'jiyoon',
-      recordId: 'rec-smoke',
-      feedback: 'smoke test feedback',
+    'admin-correct-feedback',
+    await callTool('afterglow_admin', {
+      area: 'correct', action: 'feedback', slug: 'jiyoon',
+      recordId: 'rec-smoke', feedback: 'smoke test feedback',
     }),
   );
   const correctList = assertOk(
-    'correct-list',
-    await callTool('afterglow_correct', { action: 'list', slug: 'jiyoon' }),
+    'admin-correct-list',
+    await callTool('afterglow_admin', { area: 'correct', action: 'list', slug: 'jiyoon' }),
   );
-  if (!/rec-smoke/.test(correctList.content[0].text)) {
-    throw new Error('correct list: missing recently appended record');
-  }
+  if (!/rec-smoke/.test(correctList.content[0].text)) throw new Error('correct list: missing appended record');
 
-  // handoff tool — start + status + abort (a full lifecycle is covered by unit tests)
-  // Use a fresh draft agent so we don't disturb jiyoon's state.
+  const gcList = assertOk('admin-gc-list', await callTool('afterglow_admin', { area: 'gc', action: 'list' }));
+  if (!/정리 가능 항목/.test(gcList.content[0].text)) throw new Error('gc list: missing header');
+  assertOk(
+    'admin-gc-prune-dry',
+    await callTool('afterglow_admin', { area: 'gc', action: 'prune-versions', slug: 'jiyoon', keep: 1 }),
+  );
+
+  /* ---------- interview (인계자 인터뷰 + handoff-* 셀프검수) ---------- */
+
+  // handoff-* on a fresh draft agent (구 afterglow_handoff).
   assertOk(
     'handoff-create-draft',
-    await callTool('afterglow_create', {
-      slug: 'handofftest',
-      name: 'Handoff Test',
-      role: 'tester',
-    }),
+    await callTool('afterglow_create', { slug: 'handofftest', name: 'Handoff Test', role: 'tester' }),
   );
   const handoffStart = assertOk(
-    'handoff-start',
-    await callTool('afterglow_handoff', {
-      action: 'start',
-      slug: 'handofftest',
-      limit: 3,
-    }),
+    'interview-handoff-start',
+    await callTool('afterglow_interview', { action: 'handoff-start', slug: 'handofftest', limit: 3 }),
   );
-  if (!/handoff 세션 시작/.test(handoffStart.content[0].text)) {
-    throw new Error('handoff start: expected 세션 시작');
-  }
+  if (!/handoff 세션 시작/.test(handoffStart.content[0].text)) throw new Error('handoff-start: expected 세션 시작');
   const handoffStatus = assertOk(
-    'handoff-status',
-    await callTool('afterglow_handoff', { action: 'status', slug: 'handofftest' }),
+    'interview-handoff-status',
+    await callTool('afterglow_interview', { action: 'handoff-status', slug: 'handofftest' }),
   );
-  if (!/pending 3/.test(handoffStatus.content[0].text)) {
-    throw new Error('handoff status: expected 3 pending');
-  }
+  if (!/pending 3/.test(handoffStatus.content[0].text)) throw new Error('handoff-status: expected 3 pending');
   assertOk(
-    'handoff-abort',
-    await callTool('afterglow_handoff', { action: 'abort', slug: 'handofftest' }),
+    'interview-handoff-abort',
+    await callTool('afterglow_interview', { action: 'handoff-abort', slug: 'handofftest' }),
   );
 
-  /* ---------- interview lifecycle (start → answer → gap-check → dual sign) ---------- */
+  // Successor-driven interview lifecycle (start → answer → gap-check → dual sign).
   const ivStart = assertOk(
     'interview-start',
     await callTool('afterglow_interview', {
-      action: 'start',
-      slug: 'jiyoon',
-      title: '온보딩 보강',
-      interviewer: '김후임',
-      interviewee: '이지윤',
+      action: 'start', slug: 'jiyoon', title: '온보딩 보강', interviewer: '김후임', interviewee: '이지윤',
     }),
   );
   const ivSid = ivStart.content[0].text.match(/#(\d{3}[^\s"]*)/)[1];
   const ivAdd = assertOk(
     'interview-add-question',
     await callTool('afterglow_interview', {
-      action: 'add-question',
-      slug: 'jiyoon',
-      session: ivSid,
-      question: 'step 2 설명을 줄인 이유는?',
+      action: 'add-question', slug: 'jiyoon', session: ivSid, question: 'step 2 설명을 줄인 이유는?',
     }),
   );
   const ivQid = ivAdd.content[0].text.match(/\[(q-[0-9a-f-]+)\]/)[1];
   assertOk(
     'interview-answer',
     await callTool('afterglow_interview', {
-      action: 'answer',
-      slug: 'jiyoon',
-      session: ivSid,
-      id: ivQid,
-      answer: '인지 부하를 줄이려고 절반으로 줄였어요.',
-      source: 'self-typed',
+      action: 'answer', slug: 'jiyoon', session: ivSid, id: ivQid,
+      answer: '인지 부하를 줄이려고 절반으로 줄였어요.', source: 'self-typed',
     }),
   );
   const ivGap = assertOk(
     'interview-gap-check',
     await callTool('afterglow_interview', { action: 'gap-check', slug: 'jiyoon', session: ivSid }),
   );
-  if (!/internal-contradiction/.test(ivGap.content[0].text)) {
-    throw new Error('interview gap-check: missing signal framing');
-  }
+  if (!/internal-contradiction/.test(ivGap.content[0].text)) throw new Error('gap-check: missing signal framing');
   assertOk(
     'interview-finalize-interviewer',
     await callTool('afterglow_interview', {
-      action: 'finalize',
-      slug: 'jiyoon',
-      session: ivSid,
-      signRole: 'interviewer',
-      signer: '김후임',
+      action: 'finalize', slug: 'jiyoon', session: ivSid, signRole: 'interviewer', signer: '김후임',
     }),
   );
   const ivFin = assertOk(
     'interview-finalize-interviewee',
     await callTool('afterglow_interview', {
-      action: 'finalize',
-      slug: 'jiyoon',
-      session: ivSid,
-      signRole: 'interviewee',
-      signer: '이지윤',
+      action: 'finalize', slug: 'jiyoon', session: ivSid, signRole: 'interviewee', signer: '이지윤',
     }),
   );
-  if (!/finalized/.test(ivFin.content[0].text)) {
-    throw new Error('interview finalize: expected finalized after both signatures');
-  }
-
-  /* ---------- export → verify → import (portable hot-plug) ---------- */
-  const exportCall = assertOk(
-    'export',
-    await callTool('afterglow_export', { slugs: ['jiyoon'], exportedBy: 'smoke runner' }),
-  );
-  const bundlePath = exportCall.content[0].text.match(/위치:\s*(\S+)/)[1];
-  const bundleAnchor = exportCall.content[0].text.match(/번들 앵커 해시:\s*(\S+)/)[1];
-  const verifyCall = assertOk('verify', await callTool('afterglow_verify', { input: bundlePath }));
-  if (!/import 가능|주의가 필요/.test(verifyCall.content[0].text)) {
-    throw new Error('verify: missing verdict line');
-  }
-  const importCall = assertOk(
-    'import',
-    await callTool('afterglow_import', {
-      input: bundlePath,
-      as: 'jiyoon-copy',
-      trustSigner: '이지윤',
-      importedBy: 'smoke runner',
-      expectAnchor: bundleAnchor,
-    }),
-  );
-  if (!/✓ 일치/.test(importCall.content[0].text)) {
-    throw new Error('import: expected anchor match (✓ 일치)');
-  }
-  if (!/imported/.test(importCall.content[0].text)) {
-    throw new Error('import: expected an imported agent');
-  }
-  // Imported agent should answer with a provenance banner.
-  const askImported = assertOk(
-    'ask-imported',
-    await callTool('afterglow_ask', { slug: 'jiyoon-copy', question: '온보딩?' }),
-  );
-  if (!/출처 \(provenance\)/.test(askImported.content[0].text)) {
-    throw new Error('ask on imported agent: missing provenance banner');
-  }
-
-  /* ---------- v0.3: status · gc · suggest-questions · transcribe · audit checkpoint ---------- */
-  const statusCall = assertOk('status', await callTool('afterglow_status', { json: true }));
-  const statusJson = JSON.parse(statusCall.content[0].text);
-  if (typeof statusJson.totals?.agents !== 'number') throw new Error('status: totals missing');
-
-  const gcList = assertOk('gc-list', await callTool('afterglow_gc', { action: 'list' }));
-  if (!/정리 가능 항목/.test(gcList.content[0].text)) throw new Error('gc list: missing header');
-  // dry-run prune (no --apply) must not delete anything
-  assertOk('gc-prune-dry', await callTool('afterglow_gc', { action: 'prune-versions', slug: 'jiyoon', keep: 1 }));
+  if (!/finalized/.test(ivFin.content[0].text)) throw new Error('finalize: expected finalized after both signatures');
 
   const suggest = assertOk(
     'interview-suggest',
@@ -501,7 +357,7 @@ try {
   );
   if (!/신호 A/.test(suggest.content[0].text)) throw new Error('suggest-questions: missing signal framing');
 
-  // transcribe --text round-trip: attach (the interview #001 has none) → save transcript
+  // attach → transcribe --text round-trip.
   const ivStart2 = assertOk(
     'interview-start-2',
     await callTool('afterglow_interview', { action: 'start', slug: 'jiyoon', title: '녹음', interviewer: '김후임', interviewee: '이지윤' }),
@@ -519,69 +375,88 @@ try {
   );
   if (!/저장|polished/.test(tsave.content[0].text)) throw new Error('transcribe --text: expected save');
 
-  // audit checkpoint + fast verify
-  const cp = assertOk('audit-checkpoint', await callTool('afterglow_audit', { checkpoint: true, json: true }));
-  const cpJson = JSON.parse(cp.content[0].text);
-  if (!(cpJson.checkpoints >= 1)) throw new Error('audit checkpoint: not recorded');
-  const fast = assertOk('audit-fast', await callTool('afterglow_audit', { fast: true, json: true }));
-  if (!JSON.parse(fast.content[0].text).verification?.ok) throw new Error('audit fast verify: not ok');
+  /* ---------- share (hot-plug router): export → verify → import ---------- */
 
-  // council_summary on the latest transcript
-  const summary = assertOk(
-    'council_summary',
-    await callTool('afterglow_council_summary', { json: true }),
+  const exportCall = assertOk(
+    'share-export',
+    await callTool('afterglow_share', { action: 'export', slugs: ['jiyoon'], exportedBy: 'smoke runner' }),
   );
-  const summaryJson = JSON.parse(summary.content[0].text);
-  if (!Array.isArray(summaryJson.participants) || summaryJson.participants.length === 0) {
-    throw new Error('council_summary: participants missing');
+  const bundlePath = exportCall.content[0].text.match(/위치:\s*(\S+)/)[1];
+  const bundleAnchor = exportCall.content[0].text.match(/번들 앵커 해시:\s*(\S+)/)[1];
+  const verifyCall = assertOk('share-verify', await callTool('afterglow_share', { action: 'verify', input: bundlePath }));
+  if (!/import 가능|주의가 필요/.test(verifyCall.content[0].text)) throw new Error('verify: missing verdict line');
+  if (!/서명: ✓ 검증 통과/.test(verifyCall.content[0].text)) throw new Error('verify: Ed25519 signature not verified');
+  const importCall = assertOk(
+    'share-import',
+    await callTool('afterglow_share', {
+      action: 'import', input: bundlePath, as: 'jiyoon-copy',
+      trustSigner: '이지윤', importedBy: 'smoke runner', expectAnchor: bundleAnchor,
+    }),
+  );
+  if (!/✓ 일치/.test(importCall.content[0].text)) throw new Error('import: expected anchor match (✓ 일치)');
+  if (!/imported/.test(importCall.content[0].text)) throw new Error('import: expected an imported agent');
+  const askImported = assertOk(
+    'ask-imported',
+    await callTool('afterglow_ask', { slug: 'jiyoon-copy', question: '온보딩?' }),
+  );
+  if (!/출처 \(provenance\)/.test(askImported.content[0].text)) {
+    throw new Error('ask on imported agent: missing provenance banner');
   }
 
-  const audit = assertOk(
-    'audit',
-    await callTool('afterglow_audit', { json: true }),
-  );
+  /* ---------- admin audit: checkpoint + fast + full ---------- */
+
+  const cp = assertOk('admin-audit-checkpoint', await callTool('afterglow_admin', { area: 'audit', checkpoint: true, json: true }));
+  const cpJson = JSON.parse(cp.content[0].text);
+  if (!(cpJson.checkpoints >= 1)) throw new Error('audit checkpoint: not recorded');
+  const fast = assertOk('admin-audit-fast', await callTool('afterglow_admin', { area: 'audit', fast: true, json: true }));
+  if (!JSON.parse(fast.content[0].text).verification?.ok) throw new Error('audit fast verify: not ok');
+  const audit = assertOk('admin-audit', await callTool('afterglow_admin', { area: 'audit', json: true }));
   const auditJson = JSON.parse(audit.content[0].text);
   if (!auditJson.verification?.ok) {
     throw new Error(`audit chain not OK: ${JSON.stringify(auditJson.verification)}`);
   }
 
-  // v0.8 — missing-arg elicitation: a required-arg omission returns a guided
-  // reply (with [필수] tags + slug candidates), not a crash. Goes through the
-  // real MCP transport, so this also proves the relaxed (optional) schema lets
-  // the handler run instead of the SDK rejecting on validation.
+  /* ---------- elicitation menus over the real transport ---------- */
+
+  // ask with no args → guided slug candidates ([필수] tags).
   const elicitReply = await callTool('afterglow_ask', {});
   const elicit = elicitReply.result;
   if (!elicit?.isError || !/정보가 더 필요/.test(elicit.content[0].text) || !/\[필수\] slug/.test(elicit.content[0].text) || !/jiyoon/.test(elicit.content[0].text)) {
-    throw new Error(`v0.8 elicitation guide missing for ask with no args:\n${JSON.stringify(elicitReply)}`);
+    throw new Error(`elicitation guide missing for ask with no args:\n${JSON.stringify(elicitReply)}`);
   }
-  // v0.8 — status surfaces the env/security posture.
+  // agent with no args → action menu (the v0.13 grouped-tool entrance).
+  const agentMenuReply = await callTool('afterglow_agent', {});
+  const agentMenu = agentMenuReply.result;
+  if (!agentMenu?.isError || !/\[필수\] action/.test(agentMenu.content[0].text) || !/sign/.test(agentMenu.content[0].text)) {
+    throw new Error('agent action menu missing');
+  }
+  // admin with area only → that area's action menu.
+  const adminMenuReply = await callTool('afterglow_admin', { area: 'version' });
+  const adminMenu = adminMenuReply.result;
+  if (!adminMenu?.isError || !/rollback/.test(adminMenu.content[0].text)) {
+    throw new Error('admin per-area action menu missing');
+  }
+
+  // status env posture (RAG mode / whisper / PII / enc).
   if (!statusJson.env || typeof statusJson.env.ragMode !== 'string' || typeof statusJson.env.whisperEngine !== 'string') {
-    throw new Error(`v0.8 status env block missing: ${JSON.stringify(statusJson.env)}`);
+    throw new Error(`status env block missing: ${JSON.stringify(statusJson.env)}`);
   }
 
   console.log('smoke: OK');
   console.log(`  serverInfo.name    : ${init.result.serverInfo.name}`);
   console.log(`  protocolVersion    : ${init.result.protocolVersion}`);
-  console.log(`  tools (${names.length})           : ${names.join(', ')}`);
+  console.log(`  tools (${names.length})          : ${names.join(', ')}`);
+  console.log(`  prompts (${promptNames.length})        : ${promptNames.join(', ')}`);
   console.log(`  audit total        : ${auditJson.total}`);
-  console.log(`  audit chain        : ${auditJson.verification?.ok ? 'verified' : 'broken'}`);
-  console.log(`  recalibrate output : ${recal.content[0].text.split('\n')[0]}`);
-  console.log(`  council summary    : ${summaryJson.participants.length} participants, consensus=${summaryJson.consensusReached}`);
-  console.log(`  archive round-trip : archive → list → restore → resume  OK`);
-  console.log(`  handoff lifecycle  : start (3 q) → status → abort  OK`);
-  console.log(`  access policy      : default deny + user:smoke allow + check OK`);
-  console.log(`  correct feedback   : feedback recorded + list shows entry`);
-  console.log(`  version list       : ${(versionList.content[0].text.match(/v\d+/g) ?? []).length} snapshot(s) tracked`);
-  console.log(`  interview lifecycle: start → answer → gap-check → dual-sign (#${ivSid})  OK`);
-  console.log(`  portable hot-plug  : export → verify → import (jiyoon-copy) + anchor + provenance  OK`);
-  console.log(`  v0.3 dashboard     : status (${statusJson.totals.agents} agents) + gc list/dry-run  OK`);
-  console.log(`  v0.3 suggest/transc: suggest-questions + transcribe --text save  OK`);
-  console.log(`  v0.3 audit         : checkpoint (${cpJson.checkpoints}) + fast verify  OK`);
-  console.log(`  v0.5 prompts       : ${promptNames.length} slash commands (/mcp__afterglow__*)  OK`);
-  console.log(`  v0.8 elicitation   : missing-arg → guided choices ([필수]/[선택] + candidates)  OK`);
-  console.log(`  v0.8 status env    : RAG ${statusJson.env.ragMode} · whisper ${statusJson.env.whisperEngine} · PII ${statusJson.env.piiRedaction} · enc ${statusJson.env.encryptionAtRest}  OK`);
-  console.log(`  v0.11 usability    : guide (orientation) + create --signer (auto-init+activate) + learn (knowledge ingest)  OK`);
-  console.log(`  v0.12 grounding    : ask carries the no-hallucination contract · unrelated Q → "근거 없음" refusal  OK`);
+  console.log(`  audit chain        : ${auditJson.verification?.ok ? 'verified' : 'broken'} · checkpoint ${cpJson.checkpoints} + fast verify OK`);
+  console.log(`  core path          : guide → create --signer → learn → ask (grounded + "근거 없음" refusal)  OK`);
+  console.log(`  ask multi (합동)    : 2 participants, per-participant 근거 판정  OK`);
+  console.log(`  agent router       : init·list·inspect·edit·sign·archive→restore→resume·history·status  OK`);
+  console.log(`  interview          : start→answer→gap-check→dual-sign (#${ivSid}) · handoff-* 셀프검수 · suggest · transcribe  OK`);
+  console.log(`  share router       : export(서명) → verify(✓) → import(anchor ✓ 일치) + provenance  OK`);
+  console.log(`  admin router       : access(deny/allow/check) · correct · version(${(versionList.content[0].text.match(/v\d+/g) ?? []).length} snap) · gc dry-run  OK`);
+  console.log(`  elicitation        : ask 후보메뉴 · agent action 메뉴 · admin area→action 메뉴  OK`);
+  console.log(`  status env         : RAG ${statusJson.env.ragMode} · whisper ${statusJson.env.whisperEngine} · PII ${statusJson.env.piiRedaction} · enc ${statusJson.env.encryptionAtRest}  OK`);
 } catch (err) {
   console.error('smoke: FAIL');
   console.error(err instanceof Error ? err.stack : String(err));

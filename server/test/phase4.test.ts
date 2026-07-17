@@ -1,8 +1,6 @@
 /**
  * Tests for the v0.1.3 additions:
  *   afterglow_archive (archive / restore / list)
- *   afterglow_council_summary (transcript parser + moderator output)
- *   afterglow_recalibrate --byTopic (expertise-aware diagnostic)
  *
  * Each test redirects ~/.claude/afterglow/ to a fresh tmp dir.
  */
@@ -163,266 +161,9 @@ describe('archive · edge cases', () => {
     expect(v.ok).toBe(true);
   });
 });
-
-/* --------------------------------------------------------------- */
-/* afterglow_council_summary                                       */
-/* --------------------------------------------------------------- */
-
-const FAKE_TRANSCRIPT = (extra?: string) =>
-  `# Council — 결제 폼 v3, 어떻게 갈까요?
-
-- 시각: 2026-04-12T14:32:18.000Z
-- 참가자: jiyoon · jaehoon · hiroshi
-- 질문: 결제 폼 v3, 어떻게 갈까요?
-
-## 참가자 컨텍스트
-
-### jiyoon
-- 자신있는 영역: 디자인 · 연구
-- 검색된 자료: 1 청크
-
-## 발언 기록
-
-### jiyoon
-한 화면으로 보여주는 게 좋겠어요. step 수를 줄여야 합니다.
-✦ 신뢰도 91% · [1]
-
-### jaehoon
-@hiroshi 2022년 PG사 합의가 있었던 거 아닌가요?
-✦ 신뢰도 84%
-
-### hiroshi
-맞아요. 3DS 단계는 분리 유지가 원칙입니다. ✓ 동의
-✦ 신뢰도 96% · [2]
-
-### jiyoon
-좋아요. 일반 결제는 한 화면, 3DS 만 별도. agreed.
-✦ 신뢰도 90%
-
-## 결론 (합의)
-- 일반 결제: 한 화면 유지, 폼 단계 최소화
-- 3DS: 별도 화면 유지 (hiroshi 2022 결정 존중)
-- 백엔드 변경 없음
-
-## 이견 / 보류
-- 없음 — 만장일치
-
-${extra ?? ''}
-`;
-
-describe('council_summary · parsing', () => {
-  it('summarizes a clean consensus transcript', async () => {
-    await bootstrapAndSign('jiyoon');
-    const { councilsDir } = await import('../src/storage.js');
-    await mkdir(councilsDir(), { recursive: true });
-    await writeFile(join(councilsDir(), '2026-04-12-1432-payment-v3.md'), FAKE_TRANSCRIPT(), 'utf8');
-
-    const { runCouncilSummary } = await import('../src/tools/council_summary.js');
-    const r = await runCouncilSummary({ file: '2026-04-12-1432-payment-v3', json: true });
-    expect(r.isError).toBeUndefined();
-    const parsed = JSON.parse(r.content[0].text) as {
-      participants: string[];
-      conclusion: string[];
-      dissent: string[];
-      consensusReached: boolean;
-      pings: { from: string; to: string }[];
-      turnCount: number;
-    };
-    expect(parsed.participants).toEqual(['jiyoon', 'jaehoon', 'hiroshi']);
-    expect(parsed.conclusion.length).toBeGreaterThanOrEqual(3);
-    expect(parsed.dissent).toEqual([]);
-    expect(parsed.consensusReached).toBe(true);
-    expect(parsed.pings.length).toBeGreaterThanOrEqual(1); // jaehoon → hiroshi
-    expect(parsed.turnCount).toBe(4);
-  });
-
-  it('auto-selects the most recent file when no name is given', async () => {
-    await bootstrapAndSign('jiyoon');
-    const { councilsDir } = await import('../src/storage.js');
-    await mkdir(councilsDir(), { recursive: true });
-    await writeFile(join(councilsDir(), '2026-01-01-1000-old.md'), FAKE_TRANSCRIPT(), 'utf8');
-    await writeFile(join(councilsDir(), '2026-04-12-1432-new.md'), FAKE_TRANSCRIPT(), 'utf8');
-
-    const { runCouncilSummary } = await import('../src/tools/council_summary.js');
-    const r = await runCouncilSummary({});
-    expect(r.isError).toBeUndefined();
-    expect(r.content[0].text).toContain('2026-04-12-1432-new.md');
-  });
-
-  it('flags unresolved disagreement', async () => {
-    await bootstrapAndSign('jiyoon');
-    const { councilsDir } = await import('../src/storage.js');
-    await mkdir(councilsDir(), { recursive: true });
-    const disagreement = `# Council — 의견 충돌 케이스
-
-- 시각: 2026-04-13T10:00:00.000Z
-- 참가자: jiyoon · jaehoon
-- 질문: 새 기능 도입할까요?
-
-## 발언 기록
-
-### jiyoon
-저는 반대합니다. 사용자 피드백이 아직 모자라요.
-
-### jaehoon
-저는 도입에 찬성합니다. 시장이 기다리지 않아요.
-
-## 결론 (합의)
-- (없음)
-
-## 이견 / 보류
-- jiyoon: 추가 리서치 필요
-- jaehoon: 즉시 출시 필요
-`;
-    await writeFile(join(councilsDir(), '2026-04-13-disagreement.md'), disagreement, 'utf8');
-
-    const { runCouncilSummary } = await import('../src/tools/council_summary.js');
-    const r = await runCouncilSummary({ file: '2026-04-13-disagreement', json: true });
-    expect(r.isError).toBeUndefined();
-    const parsed = JSON.parse(r.content[0].text) as {
-      consensusReached: boolean;
-      conclusion: string[];
-      dissent: string[];
-    };
-    expect(parsed.consensusReached).toBe(false);
-    expect(parsed.dissent.length).toBeGreaterThanOrEqual(2);
-  });
-
-  it('errors on missing file', async () => {
-    await bootstrapAndSign('jiyoon');
-    const { runCouncilSummary } = await import('../src/tools/council_summary.js');
-    const r = await runCouncilSummary({ file: 'does-not-exist' });
-    expect(r.isError).toBe(true);
-  });
-
-  it('errors when councils/ is empty and no file given', async () => {
-    await bootstrapAndSign('jiyoon');
-    const { runCouncilSummary } = await import('../src/tools/council_summary.js');
-    // councils/ exists but is empty
-    const r = await runCouncilSummary({});
-    expect(r.isError).toBe(true);
-  });
-
-  it('counts turns and speaker stats in text output', async () => {
-    await bootstrapAndSign('jiyoon');
-    const { councilsDir } = await import('../src/storage.js');
-    await mkdir(councilsDir(), { recursive: true });
-    await writeFile(join(councilsDir(), '2026-04-12-stats.md'), FAKE_TRANSCRIPT(), 'utf8');
-
-    const { runCouncilSummary } = await import('../src/tools/council_summary.js');
-    const r = await runCouncilSummary({ file: '2026-04-12-stats' });
-    expect(r.isError).toBeUndefined();
-    const text = r.content[0].text;
-    expect(text).toMatch(/jiyoon/);
-    expect(text).toMatch(/turn/);
-    expect(text).toContain('합의');
-  });
-});
-
-/* --------------------------------------------------------------- */
-/* recalibrate --byTopic                                           */
-/* --------------------------------------------------------------- */
-
-describe('recalibrate · byTopic (expertise-aware)', () => {
-  it('suggests removing an expertise when its asks are mostly 👎', async () => {
-    await bootstrapAndSign('jiyoon');
-    // Persona has expertise ['디자인']. Add '재무' so we can show it failing.
-    const { runEdit } = await import('../src/tools/edit.js');
-    await runEdit({ slug: 'jiyoon', addExpertise: ['재무'] });
-
-    const { historyLogPath } = await import('../src/storage.js');
-    const lines: string[] = [];
-    // 10 stable design questions
-    for (let i = 0; i < 10; i++) {
-      lines.push(`2026-02-${(i + 1).toString().padStart(2, '0')}T00:00:00.000Z  ask: "디자인 시스템 토큰 결정?" (3 chunks, confidence 88%)`);
-    }
-    // 8 finance questions, mostly 👎
-    for (let i = 0; i < 8; i++) {
-      lines.push(`2026-03-${(i + 1).toString().padStart(2, '0')}T00:00:00.000Z  ask: "재무 처리 어떻게?" (1 chunks, confidence 30%, low-conf) 👎`);
-    }
-    await writeFile(historyLogPath('jiyoon'), lines.join('\n') + '\n', 'utf8');
-
-    const { runRecalibrate } = await import('../src/tools/recalibrate.js');
-    const r = await runRecalibrate({ slug: 'jiyoon', byTopic: true });
-    expect(r.isError).toBeUndefined();
-    const text = r.content[0].text;
-    expect(text).toContain('by-topic');
-    expect(text).toContain('재무');
-    expect(text).toMatch(/제거|remove/);
-  });
-
-  it('flags out-of-expertise asks that succeed (candidate for adding)', async () => {
-    await bootstrapAndSign('jiyoon');
-    // persona has only ['디자인']
-    const { historyLogPath } = await import('../src/storage.js');
-    const lines: string[] = [];
-    for (let i = 0; i < 12; i++) {
-      // questions that mention "결제" or "운영" — neither in expertise
-      lines.push(`2026-02-${(i + 1).toString().padStart(2, '0')}T00:00:00.000Z  ask: "결제 흐름 최적화 어떻게?" (3 chunks, confidence 82%)`);
-    }
-    await writeFile(historyLogPath('jiyoon'), lines.join('\n') + '\n', 'utf8');
-
-    const { runRecalibrate } = await import('../src/tools/recalibrate.js');
-    const r = await runRecalibrate({ slug: 'jiyoon', byTopic: true });
-    expect(r.isError).toBeUndefined();
-    const text = r.content[0].text;
-    // out-of-expertise bucket should mention "추가 검토" or "adding"
-    expect(text).toMatch(/out-of-expertise|expertise 밖/);
-    expect(text).toMatch(/추가 검토|consider-adding/);
-  });
-
-  it('returns sample-too-small message when below min sample', async () => {
-    await bootstrapAndSign('jiyoon');
-    // history.log will only have create + sign lines (< 10)
-    const { runRecalibrate } = await import('../src/tools/recalibrate.js');
-    const r = await runRecalibrate({ slug: 'jiyoon', byTopic: true });
-    expect(r.content[0].text).toMatch(/표본 부족/);
-  });
-
-  it('no suggestion when topic distribution is balanced', async () => {
-    await bootstrapAndSign('jiyoon');
-    const { historyLogPath } = await import('../src/storage.js');
-    const lines: string[] = [];
-    for (let i = 0; i < 15; i++) {
-      lines.push(`2026-02-${(i + 1).toString().padStart(2, '0')}T00:00:00.000Z  ask: "디자인 시스템 토큰?" (3 chunks, confidence 75%)`);
-    }
-    await writeFile(historyLogPath('jiyoon'), lines.join('\n') + '\n', 'utf8');
-    const { runRecalibrate } = await import('../src/tools/recalibrate.js');
-    const r = await runRecalibrate({ slug: 'jiyoon', byTopic: true });
-    expect(r.content[0].text).toMatch(/제안|변경 제안 없음/);
-  });
-});
-
 /* --------------------------------------------------------------- */
 /* regression — 1차 QA P0 fixes                                    */
 /* --------------------------------------------------------------- */
-
-describe('regression · avgConfidence is a true arithmetic mean (1차 P0 fix)', () => {
-  it('25% + 75% over the same expertise yields ≈50%, not last-biased', async () => {
-    await bootstrapAndSign('jiyoon');
-    const { historyLogPath } = await import('../src/storage.js');
-    // 12 asks alternating 25/75% on the same expertise — true mean must be 50.
-    const lines: string[] = [];
-    for (let i = 0; i < 6; i++) {
-      lines.push(`2026-02-${String(i * 2 + 1).padStart(2, '0')}T00:00:00.000Z  ask: "디자인 시스템 토큰?" (3 chunks, confidence 25%)`);
-      lines.push(`2026-02-${String(i * 2 + 2).padStart(2, '0')}T00:00:00.000Z  ask: "디자인 시스템 토큰?" (3 chunks, confidence 75%)`);
-    }
-    await writeFile(historyLogPath('jiyoon'), lines.join('\n') + '\n', 'utf8');
-
-    const { runRecalibrate } = await import('../src/tools/recalibrate.js');
-    const r = await runRecalibrate({ slug: 'jiyoon', byTopic: true });
-    expect(r.isError).toBeUndefined();
-    const text = r.content[0].text;
-    // The 디자인 row should show avg ≈ 50%, well within ±5 of true mean.
-    const m = text.match(/디자인\s+\S*\s*(\d+)\s+\d+\s+\d+\s+\d+\s+(\d+)%/);
-    expect(m, `Could not parse 디자인 row from:\n${text}`).not.toBeNull();
-    if (m) {
-      const avg = Number(m[2]);
-      expect(avg).toBeGreaterThanOrEqual(45);
-      expect(avg).toBeLessThanOrEqual(55);
-    }
-  });
-});
 
 describe('regression · audit corruption blocks further append (1차 P0 fix)', () => {
   it('tampering with the last audit line causes the next append to fail loudly', async () => {
@@ -454,18 +195,6 @@ describe('regression · audit corruption blocks further append (1차 P0 fix)', (
     const r = await runList({});
     expect(r.isError).toBe(true);
     expect(r.content[0].text).toMatch(/corruption|corrupted/i);
-  });
-});
-
-describe('regression · council_summary refuses path traversal (2차 P1 fix)', () => {
-  it('rejects file arguments with slashes / dotdot', async () => {
-    await bootstrapAndSign('jiyoon');
-    const { runCouncilSummary } = await import('../src/tools/council_summary.js');
-    for (const attempt of ['../audit', '..\\storage', 'a/b', 'a\\b']) {
-      const r = await runCouncilSummary({ file: attempt });
-      expect(r.isError, `expected ${attempt} to be rejected`).toBe(true);
-      expect(r.content[0].text).toMatch(/경로 구분자|file 인자/);
-    }
   });
 });
 
@@ -576,13 +305,13 @@ describe('regression · inspect surfaces current status (3차 P2 fix)', () => {
 /* --------------------------------------------------------------- */
 
 describe('archived agent integration', () => {
-  it('archived agents block council too (not just ask)', async () => {
+  it('archived agents block multi-slug ask too (not just single ask)', async () => {
     await bootstrapAndSign('jiyoon');
     await bootstrapAndSign('jaehoon');
     const { runArchive } = await import('../src/tools/archive.js');
-    const { runCouncil } = await import('../src/tools/council.js');
+    const { runAsk } = await import('../src/tools/ask.js');
     await runArchive({ action: 'archive', slug: 'jaehoon' });
-    const r = await runCouncil({ slugs: ['jiyoon', 'jaehoon'], question: '?' });
+    const r = await runAsk({ slugs: ['jiyoon', 'jaehoon'], question: '?' } as never);
     expect(r.isError).toBe(true);
     expect(r.content[0].text).toMatch(/archived|보관/);
   });

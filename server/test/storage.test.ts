@@ -26,7 +26,7 @@ afterEach(async () => {
 
 describe('storage', () => {
   it('init creates the expected scaffold', async () => {
-    const { init, isInitialized, configPath, registryPath, councilsDir, agentsDir } =
+    const { init, isInitialized, configPath, registryPath, agentsDir } =
       await import('../src/storage.js');
 
     expect(await isInitialized()).toBe(false);
@@ -36,7 +36,7 @@ describe('storage', () => {
 
     expect(await isInitialized()).toBe(true);
     // sanity check: paths now exist
-    for (const p of [configPath(), registryPath(), councilsDir(), agentsDir()]) {
+    for (const p of [configPath(), registryPath(), agentsDir()]) {
       const stat = await import('node:fs/promises').then((m) => m.stat(p));
       expect(stat).toBeDefined();
     }
