@@ -6,7 +6,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 let tmpRoot: string;
 beforeEach(async () => {
@@ -307,5 +308,113 @@ describe('interview · import-answers (JSON from the HTML form)', () => {
     expect(imp.isError).toBeUndefined();
     const s = (await readInterviewSession('jiyoon', sid))!;
     expect(s.questions.find((q) => q.id === q1)!.answer).toContain('스니프토큰');
+  });
+});
+
+/* ---------------- legacy (pre-v0.13) sheet reuse ---------------- */
+
+describe('interview · import-answers legacy reuse (구버전 추출물)', () => {
+  const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
+
+  it('legacy answers JSON alone: questions are backfilled from titles and answers applied', async () => {
+    await bootstrap();
+    const { runInterview } = await import('../src/tools/interview.js');
+    const { agentDir, readInterviewSession } = await import('../src/storage.js');
+    const sid = await startAsync();
+
+    const sheet = join(agentDir('jiyoon'), 'legacy-answers.json');
+    await writeFile(sheet, await readFile(join(FIXTURES, 'legacy-interview-answers.json'), 'utf8'), 'utf8');
+
+    const imp = await runInterview({ action: 'import-answers', slug: 'jiyoon', session: sid, sheet } as never);
+    expect(imp.isError).toBeUndefined();
+    const text = imp.content[0].text;
+    expect(text).toContain('legacy-json');
+    expect(text).toContain('적용 11');
+    expect(text).toMatch(/자동 등록/);
+    expect(text).not.toMatch(/미매칭 id/);
+
+    const s = (await readInterviewSession('jiyoon', sid))!;
+    expect(s.questions).toHaveLength(11);
+    const q1 = s.questions.find((q) => q.question.includes('parse.py 실행 전 사전 확인 사항'))!;
+    expect(q1.status).toBe('answered');
+    expect(q1.answer).toContain('잘보내줬기를');
+
+    // Re-importing the same file must not duplicate or overwrite.
+    const again = await runInterview({ action: 'import-answers', slug: 'jiyoon', session: sid, sheet } as never);
+    expect(again.content[0].text).toContain('적용 0');
+    expect((await readInterviewSession('jiyoon', sid))!.questions).toHaveLength(11);
+  });
+
+  it('legacy HTML sheet seeds full question wording, then the answers JSON matches by id', async () => {
+    await bootstrap();
+    const { runInterview } = await import('../src/tools/interview.js');
+    const { agentDir, readInterviewSession } = await import('../src/storage.js');
+    const sid = await startAsync();
+
+    const html = join(agentDir('jiyoon'), 'legacy-sheet.html');
+    await writeFile(html, await readFile(join(FIXTURES, 'legacy-interview-sheet.html'), 'utf8'), 'utf8');
+    const seed = await runInterview({ action: 'import-answers', slug: 'jiyoon', session: sid, sheet: html } as never);
+    expect(seed.isError).toBeUndefined();
+    expect(seed.content[0].text).toContain('질문 11개 등록');
+
+    let s = (await readInterviewSession('jiyoon', sid))!;
+    expect(s.questions).toHaveLength(11);
+    const q1 = s.questions.find((q) => q.id === 'q-d787d7d3-c6e9-40b0-b8cb-f5b96caa075e')!;
+    expect(q1.status).toBe('pending');
+    // Full body from the HTML, tags stripped, entities decoded.
+    expect(q1.question).toContain('데이터 구조나 사전 체크 포인트');
+    expect(q1.question).not.toMatch(/<code>|<br>/);
+
+    const sheet = join(agentDir('jiyoon'), 'legacy-answers.json');
+    await writeFile(sheet, await readFile(join(FIXTURES, 'legacy-interview-answers.json'), 'utf8'), 'utf8');
+    const imp = await runInterview({ action: 'import-answers', slug: 'jiyoon', session: sid, sheet } as never);
+    expect(imp.isError).toBeUndefined();
+    expect(imp.content[0].text).toContain('적용 11');
+    expect(imp.content[0].text).not.toMatch(/자동 등록/); // ids matched — no backfill
+
+    s = (await readInterviewSession('jiyoon', sid))!;
+    expect(s.questions).toHaveLength(11);
+    expect(s.questions.every((q) => q.status === 'answered')).toBe(true);
+    // Seeding the same HTML again is a no-op for existing ids.
+    const reseed = await runInterview({ action: 'import-answers', slug: 'jiyoon', session: sid, sheet: html } as never);
+    expect(reseed.content[0].text).toMatch(/질문 0개 등록.*이미 있던 11개/);
+  });
+
+  it('legacy declined:true maps to declined; unanswered rows stay pending', async () => {
+    await bootstrap();
+    const { runInterview } = await import('../src/tools/interview.js');
+    const { agentDir, readInterviewSession } = await import('../src/storage.js');
+    const sid = await startAsync();
+    const sheet = join(agentDir('jiyoon'), 'legacy-mixed.json');
+    await writeFile(sheet, JSON.stringify({
+      session: 'old-001', interviewee: '이영석', interviewer: '송대석',
+      answers: [
+        { id: 'q-aaa', num: 'Q1', title: '답한 질문', declined: false, answer: '답변입니다' },
+        { id: 'q-bbb', num: 'Q2', title: '거절한 질문', declined: true, answer: null },
+        { id: 'q-ccc', num: 'Q3', title: '안 채운 질문', declined: false, answer: '' },
+      ],
+    }), 'utf8');
+    const imp = await runInterview({ action: 'import-answers', slug: 'jiyoon', session: sid, sheet } as never);
+    expect(imp.isError).toBeUndefined();
+    expect(imp.content[0].text).toContain('적용 1');
+    expect(imp.content[0].text).toContain('거절 1');
+
+    const s = (await readInterviewSession('jiyoon', sid))!;
+    expect(s.questions.find((q) => q.id === 'q-aaa')!.status).toBe('answered');
+    expect(s.questions.find((q) => q.id === 'q-bbb')!.status).toBe('declined');
+    expect(s.questions.find((q) => q.id === 'q-ccc')).toBeUndefined(); // no entry, no backfill
+  });
+
+  it('an HTML file without the legacy QUESTIONS manifest is rejected with guidance', async () => {
+    await bootstrap();
+    const { runInterview } = await import('../src/tools/interview.js');
+    const { agentDir } = await import('../src/storage.js');
+    const sid = await startAsync();
+    await addQ('jiyoon', sid, 'Q?');
+    const html = join(agentDir('jiyoon'), 'random.html');
+    await writeFile(html, '<html><body><p>hello</p></body></html>', 'utf8');
+    const r = await runInterview({ action: 'import-answers', slug: 'jiyoon', session: sid, sheet: html } as never);
+    expect(r.isError).toBe(true);
+    expect(r.content[0].text).toMatch(/구버전 질문지/);
   });
 });

@@ -1,0 +1,85 @@
+{
+  "session": "001-dicom-nrrd-inspection",
+  "interviewee": "이영석",
+  "interviewer": "송대석",
+  "exportedAt": "2026-06-17T05:42:57.098Z",
+  "answers": [
+    {
+      "id": "q-d787d7d3-c6e9-40b0-b8cb-f5b96caa075e",
+      "num": "Q1",
+      "title": "parse.py 실행 전 사전 확인 사항",
+      "declined": false,
+      "answer": "아뇨 없습니다. 그저 그들이 잘보내줬기를 믿을뿐... ㅠㅠ"
+    },
+    {
+      "id": "q-ce6d1ffe-8c9d-4546-bdb1-fdd552ecc620",
+      "num": "Q2",
+      "title": "picks.json summary 이상 판단 기준",
+      "declined": false,
+      "answer": "hip/knee/angle이 모두 동일한 개수로 검출되지 않는 상황에서 아마 필터링될겁니다."
+    },
+    {
+      "id": "q-c1ae09a6-fcc1-4094-bd0b-759be6312084",
+      "num": "Q3",
+      "title": "전체 검수 작업 순서",
+      "declined": false,
+      "answer": "parse 돌려서 구분하기 -> 구분된 결과 visualize하고 눈으로 검수하기 (bar align이 되는지, 그리고 각 part 위치가 다 정상적으로 꺼내졌는지) -> 맞다면 export 후, nrrd로 잘 뽑혔는지 확인하기."
+    },
+    {
+      "id": "q-2508f01b-7195-4a07-b03f-e71d1c1295a7",
+      "num": "Q4",
+      "title": "vis_part / vis_align_AP / vis_align_LA 체크 포인트",
+      "declined": false,
+      "answer": "그냥 다봅니다... ㅋㅋㅋ vis_part는 각 부위가 제대로 뽑혔는지, vis_align_{AP, LA}는 bar align이 맞는지를 봅니다."
+    },
+    {
+      "id": "q-11679d90-b031-4721-8391-9006ddca3bc4",
+      "num": "Q5",
+      "title": "vis_part 부위 오분류 판단 기준",
+      "declined": false,
+      "answer": "눈으로 그냥 봅니다... 패턴은... 아직 찾지못했습니다 ㅠㅠ"
+    },
+    {
+      "id": "q-100583a6-7bef-48b1-8417-a9da97a6c94a",
+      "num": "Q6",
+      "title": "vis_align_AP/LA 정렬 이상 판단 기준",
+      "declined": false,
+      "answer": "눈으로만 봅니다. 오차로는 검증하지 않았습니다."
+    },
+    {
+      "id": "q-284b5c14-9d34-4a76-ac0c-9c3955801476",
+      "num": "Q7",
+      "title": "partially_dropped_patients 처리 방법",
+      "declined": false,
+      "answer": "눈으로 보고... 역시나 잘못파싱되었으면 억지로 뽑습니다 ㅠ 파싱이 완벽하지 않을것이라 생각하고 애초에 잘안될것도 가정했습니다."
+    },
+    {
+      "id": "q-0a0e2820-4143-495d-b383-17f5af16924e",
+      "num": "Q8",
+      "title": "--raw --patient 옵션 사용 시점",
+      "declined": false,
+      "answer": "bar align이 안맞거나, 부위가 잘못뽑히면 raw patient써서 다뽑고, 뭐에서 잘못되었는지봅니다. 그리고 그게 파싱룰에 포함될것같으며 포함하고 아니라면 그냥 수작업으로 합니다..."
+    },
+    {
+      "id": "q-2bb35b1d-8c5d-4ff1-ade3-c1e51decf12b",
+      "num": "Q9",
+      "title": "병원별 DICOM 특이 케이스",
+      "declined": false,
+      "answer": "그냥 subdirectory가 어떤구조로 되어있는가 정도인데, 애초에 그걸 다 고려하지못하다보니 저는 그냥 모든 dcm 다읽는식으로 했습니다. 그러다보니 특이케이스를 처리하지는 않았습니다."
+    },
+    {
+      "id": "q-f775310a-e1b6-4237-af1f-5636da67c19c",
+      "num": "Q10",
+      "title": "NRRD export 후 검증 방법",
+      "declined": false,
+      "answer": "없습니다..."
+    },
+    {
+      "id": "q-f162e5a0-30f5-47ad-bd65-5853e9a7590c",
+      "num": "Q11",
+      "title": "자주 실수하는 부분 / 신규 인계 시 주의사항",
+      "declined": false,
+      "answer": "그냥... 항상 눈으로 검수해라... 뿐인것같네요;; 하 아니면 병원에다가 많이 요청해라.. 인것 같습니다 ㅠ"
+    }
+  ]
+}

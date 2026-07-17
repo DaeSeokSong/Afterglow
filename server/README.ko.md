@@ -144,7 +144,7 @@ sequenceDiagram
     <tr>
       <td><code>afterglow_interview</code></td>
       <td><code>/afterglow interview &lt;slug&gt; --action start|add-question|answer|gap-check|suggest-questions|attach|transcribe|review|annotate|export-sheet|import-answers|status|list|inspect|finalize|abort|handoff-start|handoff-review|handoff-status|handoff-finalize|handoff-abort</code></td>
-      <td><b>인터뷰 라우터 — 두 흐름.</b> ① <b>인계자 주도 다중 인터뷰</b>: 회차 무제한, <code>gap-check</code>(4신호 갭 자동 감지, LLM 비호출), <code>attach</code>(음성·영상 — 전사본만 RAG 인덱싱), <code>transcribe</code>(WASM whisper), 실시간(<code>mode=sync</code>) 또는 <b>HTML 답변지</b>(<code>mode=async</code> → <code>export-sheet</code>: 체크박스 + 자동저장 → <code>import-answers</code>), <code>finalize</code>(인터뷰어+인터뷰이 <b>이중 서명</b>). 답변은 <code>persona.bio</code> 의 <code>## 인터뷰 보강 #N</code> 블록으로 누적. ② <b>본인 셀프 검수</b>(구 handoff): <code>handoff-start</code> → 질문 keep/edit/decline 검수(<code>handoff-review</code>) → <code>handoff-finalize</code> 본인 서명으로 active 전환, edit/decline 답변은 bio 에 흡수.</td>
+      <td><b>인터뷰 라우터 — 두 흐름.</b> ① <b>인계자 주도 다중 인터뷰</b>: 회차 무제한, <code>gap-check</code>(4신호 갭 자동 감지, LLM 비호출), <code>attach</code>(음성·영상 — 전사본만 RAG 인덱싱), <code>transcribe</code>(WASM whisper), 실시간(<code>mode=sync</code>) 또는 <b>HTML 답변지</b>(<code>mode=async</code> → <code>export-sheet</code>: 체크박스 + 자동저장 → <code>import-answers</code> — 구버전(≤0.12) 답변 JSON·HTML 질문지도 인식해 질문을 자동 등록), <code>finalize</code>(인터뷰어+인터뷰이 <b>이중 서명</b>). 답변은 <code>persona.bio</code> 의 <code>## 인터뷰 보강 #N</code> 블록으로 누적. ② <b>본인 셀프 검수</b>(구 handoff): <code>handoff-start</code> → 질문 keep/edit/decline 검수(<code>handoff-review</code>) → <code>handoff-finalize</code> 본인 서명으로 active 전환, edit/decline 답변은 bio 에 흡수.</td>
     </tr>
     <tr>
       <td><code>afterglow_share</code></td>

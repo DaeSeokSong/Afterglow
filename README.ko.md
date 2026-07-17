@@ -159,6 +159,8 @@ afterglow:interview→ slug:jiyoon, action:start, title:결제 갭, interviewer:
 #### ≤0.12 (26개 도구) 에서 넘어오기
 기능은 그대로, 주소만 바뀌었습니다 — 삭제된 것은 `council_summary` 와 `recalibrate` 뿐입니다 (v0.12 근거 게이트가 자동 보정을 대체):
 
+> **예전 파일도 그대로 씁니다.** `interview --action import-answers` 가 구버전 산출물을 인식합니다: 구버전 답변 JSON(`{…, answers:[{id, title, declined, answer}]}`)은 바로 반영되고 — 회차에 없는 질문은 제목으로 자동 등록 — 구버전 HTML 질문지는 질문 전문을 회차에 먼저 심어줘서, 이어서 넣는 답변 JSON 이 같은 id 로 매칭됩니다.
+
 | 예전 도구 | 지금 |
 | --- | --- |
 | `init` / `list` / `status` / `inspect` / `edit` / `sign` / `resume` / `history` | `agent` + `action:<같은 이름>` |

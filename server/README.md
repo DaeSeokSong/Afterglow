@@ -89,7 +89,7 @@ Four you'll use every day, four routers for everything else. The root [README](.
 
 **`agent`** (`action`) — `list` · `status` (global dashboard + staleness + RAG/whisper posture) · `inspect` · `edit` (fields / open in `$EDITOR` / revalidate) · `sign` · `resume` · `archive` · `restore` · `history` · `init`
 
-**`interview`** (`action`) — successor-driven multi-round interviews: `start` (auto question suggestions) · `add-question` · `answer` · `gap-check` · `attach` (audio/video) · `transcribe` (WASM whisper) · `export-sheet` / `import-answers` (HTML answer sheet with auto-save) · `finalize` (dual signature) — plus the departing person's self-review as `handoff-start` · `handoff-review` · `handoff-status` · `handoff-finalize` · `handoff-abort`
+**`interview`** (`action`) — successor-driven multi-round interviews: `start` (auto question suggestions) · `add-question` · `answer` · `gap-check` · `attach` (audio/video) · `transcribe` (WASM whisper) · `export-sheet` / `import-answers` (HTML answer sheet with auto-save; also accepts ≤0.12 legacy answers JSON — missing questions backfilled — and legacy HTML question sheets) · `finalize` (dual signature) — plus the departing person's self-review as `handoff-start` · `handoff-review` · `handoff-status` · `handoff-finalize` · `handoff-abort`
 
 **`share`** (`action`) — `export` (bundle + **Ed25519 signature**) · `import` (verifies signature + integrity; refuses tampered bundles) · `verify` (read-only pre-flight)
 

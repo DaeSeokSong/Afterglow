@@ -158,6 +158,8 @@ afterglow:interview→ slug:jiyoon, action:start, title:Payment gaps, interviewe
 #### Migrating from ≤0.12 (26 tools)
 Same features, new addresses — nothing was dropped except `council_summary` and `recalibrate` (the v0.12 grounding gate made auto-recalibration redundant):
 
+> **Old files stay usable.** `interview --action import-answers` also accepts artifacts made by older versions: a legacy answers JSON (`{…, answers:[{id, title, declined, answer}]}`) imports directly — questions the session doesn't have are auto-created from their titles — and a pre-v0.13 HTML question sheet seeds its full question wording into the session first, so the matching answers JSON then lands on the same ids.
+
 | Old tool | Now |
 | --- | --- |
 | `init` / `list` / `status` / `inspect` / `edit` / `sign` / `resume` / `history` | `agent` + `action:<same name>` |
