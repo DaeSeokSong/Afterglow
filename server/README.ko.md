@@ -55,6 +55,51 @@ claude mcp add afterglow npx -y @daeseoksong/afterglow-mcp
 
 별도 GPU · 임베딩 API · 외부 서버 필요 없음. **무료**.
 
+<a href="cursor://anysphere.cursor-deeplink/mcp/install?name=afterglow&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBkYWVzZW9rc29uZy9hZnRlcmdsb3ctbWNwIl19"><img alt="Cursor 원클릭 설치" src="https://img.shields.io/badge/Cursor-원클릭_설치-29261b?style=flat-square&color=B5482C"></a>
+
+<details>
+<summary><b>다른 MCP 클라이언트에 설치</b> (Claude Desktop · Cursor · VS Code · Windsurf · Codex · Gemini CLI)</summary>
+
+모든 클라이언트가 이해하는 표준 설정:
+
+```json
+{
+  "mcpServers": {
+    "afterglow": {
+      "command": "npx",
+      "args": ["-y", "@daeseoksong/afterglow-mcp"]
+    }
+  }
+}
+```
+
+**Claude Desktop** — 위 블록을 `claude_desktop_config.json` 에 추가 (설정 → Developer → Edit Config).
+
+**Cursor** — 위 원클릭 배지를 누르거나, `~/.cursor/mcp.json` (프로젝트별로는 `.cursor/mcp.json`)에 추가.
+
+**VS Code** —
+```bash
+code --add-mcp '{"name":"afterglow","command":"npx","args":["-y","@daeseoksong/afterglow-mcp"]}'
+```
+또는 `.vscode/mcp.json` 의 `"servers"` 키에 추가.
+
+**Windsurf** — `~/.codeium/windsurf/mcp_config.json` 에 위 블록 추가.
+
+**Codex CLI** — `~/.codex/config.toml` 에:
+```toml
+[mcp_servers.afterglow]
+command = "npx"
+args = ["-y", "@daeseoksong/afterglow-mcp"]
+```
+
+**Gemini CLI** — `~/.gemini/settings.json` 에 위 블록 추가.
+
+**표면 줄이기 (선택)** — 설정에 `"env": {"AFTERGLOW_TOOLSETS": "core"}` (또는 args 에 `--toolsets core`)를 추가하면 핵심 4개(`guide` · `create` · `learn` · `ask`)만 노출됩니다. 도구가 적을수록 모델의 tool choice 가 정확해지고 컨텍스트도 가벼워져요. 언제든 `all` 로 복귀.
+
+</details>
+
+> `npx @daeseoksong/afterglow-mcp --help` 로 사용법, `--version` 으로 버전 확인 (인자 없이 실행하면 stdio 서버 — 클라이언트가 실행하는 모드).
+
 이어서 첫 사용 — **3단계, init 불필요**:
 
 ```bash
@@ -166,6 +211,8 @@ sequenceDiagram
 > v0.8 에서 <b>WASM whisper 엔진</b>(<code>transcribe --apply</code>, `@xenova/transformers` optionalDependency — 네이티브 빌드 불필요), <b>하이브리드 RAG 재랭킹</b>(dense+lexical RRF 융합), 전사본 <b>PII 마스킹</b>(`AFTERGLOW_PII_REDACT=1`)·<b>저장 암호화</b>(`AFTERGLOW_ENCRYPTION_KEY`, AES-256-GCM), <code>interview start</code> 의 <b>자동 질문 제안</b>(진행 여부 자동 질의)이 추가됐습니다.
 >
 > v0.13 에서 <code>import-answers</code> 가 <b>구버전(≤0.12) 산출물을 재활용</b>합니다 — 옛 답변 JSON(<code>{…, answers:[{id, title, declined, answer}]}</code>)은 회차에 없는 질문을 제목으로 <b>자동 등록(backfill)</b> 하며 반영되고, 구버전 HTML 질문지는 질문 전문을 회차에 심어(seed) 이어 넣는 답변 JSON 이 같은 id 로 매칭됩니다.
+>
+> v0.14 에서 인기 MCP 서버들(playwright-mcp · github-mcp-server)의 UX 패턴을 도입 — 도구별 <b>MCP annotations</b>(`guide`/`ask` 는 read-only 힌트라 클라이언트가 승인 프롬프트를 완화 가능, `admin` 은 destructive, `learn` 은 open-world), 슬래시 인자 <b>자동완성</b>(`completion/complete` 지원 클라이언트에서 등록된 slug·action·area 를 Tab 완성 — admin action 은 고른 area 의 어휘만), <b>`AFTERGLOW_TOOLSETS=core`</b>(핵심 4개만 노출), <b>`--version`/`--help`</b> CLI 플래그.
 
 <details>
 <summary><b>입력 스키마 자세히 보기</b></summary>
@@ -317,6 +364,7 @@ import 가 자동으로 확인하는 것:
 | 변수 | 기본값 | 용도 |
 | --- | --- | --- |
 | `AFTERGLOW_ROOT` | `~/.claude/afterglow` | 모든 데이터의 루트. 테스트 / dev 환경 격리 시 임시 폴더 지정. |
+| `AFTERGLOW_TOOLSETS` | `all` | `core` 로 설정 시 핵심 4개(`guide`/`create`/`learn`/`ask`)만 노출 — 표면이 작을수록 tool choice 정확. CLI `--toolsets core` 로도 가능. |
 | `AFTERGLOW_ALLOW_DRAFT` | unset | `1` 로 설정 시 `ask` 의 active 게이트 우회. 테스트/디버그 전용. |
 | `AFTERGLOW_RAG_BACKEND` | `lexical` | `dense` 로 설정 시 임베딩 백엔드 사용 (`AFTERGLOW_EMBED_ENDPOINT` 필요, 실패 시 lexical 폴백). |
 | `AFTERGLOW_RAG_HYBRID` | on (dense 일 때) | `off` 로 설정 시 dense 단독. 기본은 dense + lexical 의 **RRF 하이브리드 재랭킹**. |
@@ -413,6 +461,7 @@ export async function retrieve(slug: string, query: string, topK = 4): Promise<R
 
 - [x] 도구 8개: **`guide`** · **`create`** · **`learn`** · **`ask`** · `agent` · `interview` · `share` · `admin` — ≤0.12 의 모든 기능이 action 으로 유지
 - [x] **대대적 단순화(v0.13)** — 도구 표면 26 → 8 통합 (council → `ask --slugs` 흡수, council_summary/recalibrate 삭제, action/area 누락 시 번호 메뉴)
+- [x] **MCP 네이티브 UX(v0.14)** — annotations(read-only/destructive/open-world 힌트) · 슬래시 인자 자동완성(slug·action·area, admin 은 area 인지) · `AFTERGLOW_TOOLSETS=core` · `--version`/`--help` · 클라이언트별 설치 매트릭스
 - [x] **사용성(v0.11)** — `guide`(상태별 시작 안내) · `learn`(자료 추가, 숨은 폴더 불필요) · `create --signer`(자동 init+활성화 → 핵심 3단계 create→learn→ask)
 - [x] **근거 기반/할루시네이션 방지(v0.12)** — ask(단독·합동)에 grounding contract + 충족도 게이트(없음/매우부족/부분/충분) · 신뢰도 버그 수정 · 한국어 조사 제거 검색 · 다각도 QA 증명
 - [x] zod 스키마 + 시스템 프롬프트 자동 렌더링

@@ -113,7 +113,7 @@ claude /afterglow ask    jiyoon "..."
 
 > `--signer` collapses `create` + `sign` into one call (drop it to keep the agent in `draft` until a separate `sign`). `learn` is how you give the agent something to retrieve — paste text, point at a file/folder under your working dir, or a URL.
 
-See [`server/README.md`](./server/README.md) for the full tool reference.
+See [`server/README.md`](./server/README.md) for the full tool reference — including **install snippets for other MCP clients** (Claude Desktop · Cursor one-click · VS Code · Windsurf · Codex · Gemini CLI) and `AFTERGLOW_TOOLSETS=core` to expose just the 4 happy-path tools.
 
 > **Two ways to invoke.** Afterglow is an MCP server, so the actual tool calls are JSON like `afterglow_interview({slug: "jiyoon", action: "handoff-start"})`. You can drive it either way:
 > 1. **Natural language** — say "create an afterglow agent for Jiyoon" and Claude picks the right tool.
@@ -442,13 +442,14 @@ These are deliberate PoC trade-offs; closing them is a separate exercise for any
 
 ## 🗺 Roadmap
 
-### Now (v0.13.0)
+### Now (v0.14.0)
 - [x] 18-screen interactive proposal (Vite + React 19 + TS)
 - [x] Cmd+K palette + keyboard shortcuts + cross-screen click navigation
 - [x] All 8 MCP tools (**`guide`** · **`create`** · **`learn`** · **`ask`** · `agent` · `interview` · `share` · `admin`) — every ≤0.12 capability lives on as an action of one of these
 - [x] **Usability (v0.11)** — **`guide`** state-aware getting-started; **`learn`** to add knowledge (text/file/folder/URL) so you never hand-copy into a hidden folder; **`create --signer`** auto-inits *and* activates so the happy path is 3 steps (`create → learn → ask`), no `init`
 - [x] **Grounding / anti-hallucination (v0.12)** — `ask` (single & joint) now leads with a hard **grounding contract** (cite `[소개]`/`[n]`/`[보정]` or don't say it) + a backend-independent **coverage gate** (verdict 근거 없음 / 매우 부족 / 부분 / 충분, missing terms named) so unprovided info must be refused, not invented. Fixed the confidence bug (was ~100% for any BM25 hit) and added Korean particle-stripping so retrieval actually finds inflected matches. Proven by a multi-angle QA suite (empty / unrelated / partial / adversarial-injection / dense-backend / joint ask)
 - [x] **Radical simplification (v0.13)** — the tool surface consolidated **26 → 8** with features intact: `guide`/`create`/`learn`/`ask` stay standalone; everything else grouped into `agent`, `interview`(+`handoff-*` self-review), `share`, `admin`. `council` became `ask --slugs`; `council_summary`/`recalibrate` removed. Omitted actions/areas come back as numbered menus
+- [x] **MCP-native UX (v0.14, patterns from playwright-mcp / github-mcp-server)** — per-tool **annotations** (`guide`/`ask` read-only → clients can relax approval prompts; `admin` destructive; `learn` open-world), slash-argument **completions** (`completion/complete`: registered slugs, action/area vocabularies, admin actions narrowed to the chosen area), **`AFTERGLOW_TOOLSETS=core`** to expose only the 4 happy-path tools, `--version`/`--help` CLI flags, English-first tool descriptions for better routing, and a per-client **install matrix** (Claude Desktop · Cursor one-click · VS Code · Windsurf · Codex · Gemini CLI)
 - [x] zod persona schema + auto-rendered system prompt
 - [x] Lexical RAG retrieval — BM25, no external deps — `knowledge/` + interview transcripts
 - [x] SHA-256 hash-chained audit log + verifier

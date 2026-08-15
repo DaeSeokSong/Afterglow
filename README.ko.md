@@ -114,7 +114,7 @@ claude /afterglow ask    jiyoon "..."
 
 > `--signer` 를 주면 create + sign 이 한 번에 됩니다(생략하면 draft 로 남고 별도 sign 필요). `learn` 으로 ask 가 검색할 자료를 넣으세요 — 텍스트 붙여넣기, cwd 하위 파일/폴더, URL.
 
-자세한 내용은 [`server/README.ko.md`](./server/README.ko.md) 참고.
+자세한 내용은 [`server/README.ko.md`](./server/README.ko.md) 참고 — **다른 MCP 클라이언트 설치 스니펫**(Claude Desktop · Cursor 원클릭 · VS Code · Windsurf · Codex · Gemini CLI)과 핵심 4개만 노출하는 `AFTERGLOW_TOOLSETS=core` 도 거기 있습니다.
 
 > **참고 — 두 가지 호출 방식.** Afterglow 는 MCP 서버라 도구는 실제로 `afterglow_interview({slug:"jiyoon", action:"handoff-start"})` 같은 JSON 호출입니다. 두 가지로 부를 수 있어요:
 > 1. **자연어** — "지윤님 afterglow 에이전트 만들어줘" 처럼 말하면 Claude 가 알맞은 도구를 호출합니다.
@@ -447,11 +447,12 @@ Afterglow v0.2.0 은 **PoC 단계**입니다. 운영 배포 전 알아두면 좋
 
 ## 🗺 Roadmap
 
-### 현재 (v0.13.0)
+### 현재 (v0.14.0)
 - [x] 18 화면 인터랙티브 제안서 (Vite + React 19 + TS)
 - [x] Cmd+K 팔레트 + 키보드 단축키 + 화면 간 클릭 네비
 - [x] **MCP 서버 8 도구**: **`guide`** · **`create`** · **`learn`** · **`ask`** · `agent` · `interview` · `share` · `admin` — ≤0.12 의 모든 기능이 이 8개의 action 으로 유지
 - [x] **대대적 단순화 (v0.13)** — 도구 표면 **26 → 8** 통합, 기능은 그대로: `guide`/`create`/`learn`/`ask` 는 단독 유지, 나머지는 `agent` · `interview`(+`handoff-*` 셀프검수) · `share` · `admin` 으로 그룹화. `council` 은 `ask --slugs` 로 흡수, `council_summary`/`recalibrate` 는 삭제. action/area 를 비우면 번호 메뉴로 안내
+- [x] **MCP 네이티브 UX (v0.14, playwright-mcp·github-mcp-server 패턴)** — 도구별 **annotations**(`guide`/`ask` read-only → 클라이언트가 승인 프롬프트 완화 가능, `admin` destructive, `learn` open-world), 슬래시 인자 **자동완성**(`completion/complete`: 등록된 slug·action/area 어휘, admin action 은 고른 area 로 좁힘), **`AFTERGLOW_TOOLSETS=core`**(핵심 4개만 노출), `--version`/`--help` CLI 플래그, 라우팅 개선용 영어 우선 도구 설명, 클라이언트별 **설치 매트릭스**(Claude Desktop · Cursor 원클릭 · VS Code · Windsurf · Codex · Gemini CLI)
 - [x] persona zod schema + 시스템 프롬프트 자동 렌더링
 - [x] **렉시컬 RAG** — BM25 (외부 의존성 0) — `knowledge/` + 인터뷰 전사본
 - [x] **SHA-256 hash-chained 감사 로그** + 무결성 검증

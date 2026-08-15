@@ -86,6 +86,63 @@ function assertOk(label, reply) {
   return reply.result;
 }
 
+/** Spawn a second server with AFTERGLOW_TOOLSETS=core and list its surface. */
+async function withCoreServer() {
+  const coreChild = spawn(process.execPath, [entry], {
+    stdio: ['pipe', 'pipe', 'inherit'],
+    env: { ...env, AFTERGLOW_TOOLSETS: 'core' },
+    cwd: tmpRoot,
+  });
+  let coreBuf = '';
+  const corePending = new Map();
+  coreChild.stdout.on('data', (chunk) => {
+    coreBuf += chunk.toString('utf8');
+    let i;
+    while ((i = coreBuf.indexOf('\n')) >= 0) {
+      const line = coreBuf.slice(0, i).trim();
+      coreBuf = coreBuf.slice(i + 1);
+      if (!line) continue;
+      try {
+        const msg = JSON.parse(line);
+        if (typeof msg.id === 'number' && corePending.has(msg.id)) {
+          corePending.get(msg.id)(msg);
+          corePending.delete(msg.id);
+        }
+      } catch { /* ignore */ }
+    }
+  });
+  let coreId = 1;
+  const coreReq = (method, params) => new Promise((resolve) => {
+    const id = coreId++;
+    corePending.set(id, resolve);
+    coreChild.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
+  });
+  try {
+    await coreReq('initialize', {
+      protocolVersion: '2024-11-05', capabilities: {},
+      clientInfo: { name: 'afterglow-smoke-core', version: '0.0.1' },
+    });
+    coreChild.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
+    const tools = ((await coreReq('tools/list', {}))?.result?.tools ?? []).map((t) => t.name).sort();
+    const prompts = ((await coreReq('prompts/list', {}))?.result?.prompts ?? []).map((p) => p.name).sort();
+    return { tools, prompts };
+  } finally {
+    coreChild.kill();
+  }
+}
+
+/** Run dist/index.js with plain CLI flags and capture stdout. */
+function runCli(args) {
+  return new Promise((resolve, reject) => {
+    const p = spawn(process.execPath, [entry, ...args], { env, cwd: tmpRoot });
+    let out = '';
+    p.stdout.on('data', (c) => { out += c.toString('utf8'); });
+    p.on('error', reject);
+    p.on('exit', (code) => (code === 0 ? resolve(out) : reject(new Error(`exit ${code}: ${out}`))));
+    setTimeout(() => { p.kill(); reject(new Error(`CLI ${args.join(' ')} did not exit (hung as stdio server?)`)); }, 5000);
+  });
+}
+
 // v0.13 — the consolidated 8-tool surface (sorted).
 const EXPECTED_TOOLS = [
   'afterglow_admin',
@@ -118,6 +175,21 @@ try {
     throw new Error(
       `tools mismatch:\n  got      ${JSON.stringify(names)}\n  expected ${JSON.stringify(EXPECTED_TOOLS)}`,
     );
+  }
+
+  /* ---------- v0.14: server instructions + per-tool annotations ---------- */
+  if (!/create/.test(init.result.instructions ?? '')) {
+    throw new Error('initialize: missing/empty server instructions');
+  }
+  const toolByName = new Map((list.result.tools ?? []).map((t) => [t.name, t]));
+  const ann = (n) => toolByName.get(n)?.annotations ?? {};
+  if (ann('afterglow_ask').readOnlyHint !== true) throw new Error('ask should be readOnlyHint:true');
+  if (ann('afterglow_guide').readOnlyHint !== true) throw new Error('guide should be readOnlyHint:true');
+  if (ann('afterglow_admin').destructiveHint !== true) throw new Error('admin should be destructiveHint:true');
+  if (ann('afterglow_learn').openWorldHint !== true) throw new Error('learn should be openWorldHint:true (url mode)');
+  if (ann('afterglow_agent').readOnlyHint !== false) throw new Error('agent should be readOnlyHint:false');
+  for (const n of EXPECTED_TOOLS) {
+    if (!toolByName.get(n)?.title) throw new Error(`${n} is missing a title`);
   }
 
   /* ---------- MCP prompts (slash commands /mcp__afterglow__<name>) ---------- */
@@ -442,6 +514,61 @@ try {
     throw new Error(`status env block missing: ${JSON.stringify(statusJson.env)}`);
   }
 
+  /* ---------- v0.14: prompt-argument completions ---------- */
+  // Agents jiyoon + jaehoon exist by now — completing "ji" must offer jiyoon.
+  const compSlug = await request('completion/complete', {
+    ref: { type: 'ref/prompt', name: 'ask' },
+    argument: { name: 'slug', value: 'ji' },
+  });
+  const slugValues = compSlug?.result?.completion?.values ?? [];
+  if (!slugValues.includes('jiyoon')) {
+    throw new Error(`completion ask.slug("ji") missing jiyoon: ${JSON.stringify(slugValues)}`);
+  }
+  // Comma-aware multi-slug: completing "jiyoon,ja" must offer "jiyoon,jaehoon".
+  const compMulti = await request('completion/complete', {
+    ref: { type: 'ref/prompt', name: 'ask' },
+    argument: { name: 'slug', value: 'jiyoon,ja' },
+  });
+  const multiValues = compMulti?.result?.completion?.values ?? [];
+  if (!multiValues.some((v) => v === 'jiyoon,jaehoon')) {
+    throw new Error(`completion ask.slug("jiyoon,ja") missing jiyoon,jaehoon: ${JSON.stringify(multiValues)}`);
+  }
+  // Enum completion: agent.action "ar" → archive.
+  const compAction = await request('completion/complete', {
+    ref: { type: 'ref/prompt', name: 'agent' },
+    argument: { name: 'action', value: 'ar' },
+  });
+  if (!(compAction?.result?.completion?.values ?? []).includes('archive')) {
+    throw new Error('completion agent.action("ar") missing archive');
+  }
+  // Context-aware: admin.action with area=gc offers gc's vocabulary only.
+  const compAdmin = await request('completion/complete', {
+    ref: { type: 'ref/prompt', name: 'admin' },
+    argument: { name: 'action', value: '' },
+    context: { arguments: { area: 'gc' } },
+  });
+  const adminValues = compAdmin?.result?.completion?.values ?? [];
+  if (!adminValues.includes('prune-versions') || adminValues.includes('rollback')) {
+    throw new Error(`completion admin.action(area=gc) wrong vocabulary: ${JSON.stringify(adminValues)}`);
+  }
+
+  /* ---------- v0.14: AFTERGLOW_TOOLSETS=core + --version ---------- */
+  const coreNames = await withCoreServer();
+  if (JSON.stringify(coreNames.tools) !== JSON.stringify(['afterglow_ask', 'afterglow_create', 'afterglow_guide', 'afterglow_learn'])) {
+    throw new Error(`toolsets=core tools mismatch: ${JSON.stringify(coreNames.tools)}`);
+  }
+  if (JSON.stringify(coreNames.prompts) !== JSON.stringify(['ask', 'create', 'guide', 'learn'])) {
+    throw new Error(`toolsets=core prompts mismatch: ${JSON.stringify(coreNames.prompts)}`);
+  }
+  const versionOut = await runCli(['--version']);
+  if (!/^\d+\.\d+\.\d+$/.test(versionOut.trim())) {
+    throw new Error(`--version printed: ${JSON.stringify(versionOut)}`);
+  }
+  const helpOut = await runCli(['--help']);
+  if (!/afterglow-mcp/.test(helpOut) || !/--toolsets/.test(helpOut)) {
+    throw new Error('--help output missing usage/--toolsets');
+  }
+
   console.log('smoke: OK');
   console.log(`  serverInfo.name    : ${init.result.serverInfo.name}`);
   console.log(`  protocolVersion    : ${init.result.protocolVersion}`);
@@ -457,6 +584,9 @@ try {
   console.log(`  admin router       : access(deny/allow/check) · correct · version(${(versionList.content[0].text.match(/v\d+/g) ?? []).length} snap) · gc dry-run  OK`);
   console.log(`  elicitation        : ask 후보메뉴 · agent action 메뉴 · admin area→action 메뉴  OK`);
   console.log(`  status env         : RAG ${statusJson.env.ragMode} · whisper ${statusJson.env.whisperEngine} · PII ${statusJson.env.piiRedaction} · enc ${statusJson.env.encryptionAtRest}  OK`);
+  console.log(`  v0.14 annotations  : ask/guide read-only · admin destructive · learn open-world · 8 titles  OK`);
+  console.log(`  v0.14 completions  : slug("ji")→jiyoon · multi("jiyoon,ja") · agent action · admin area-aware  OK`);
+  console.log(`  v0.14 toolsets     : core → 4 tools + 4 prompts · --version ${versionOut.trim()} · --help  OK`);
 } catch (err) {
   console.error('smoke: FAIL');
   console.error(err instanceof Error ? err.stack : String(err));
