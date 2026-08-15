@@ -13,7 +13,7 @@ import { errorReply, safe, type ToolReply } from './types.js';
  * action delegates to the original implementation unchanged.
  */
 
-const SHARE_ACTIONS = ['export', 'import', 'verify'] as const;
+export const SHARE_ACTIONS = ['export', 'import', 'verify'] as const;
 type ShareAction = (typeof SHARE_ACTIONS)[number];
 
 export const shareShape = {

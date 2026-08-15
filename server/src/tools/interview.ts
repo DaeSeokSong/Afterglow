@@ -313,7 +313,7 @@ interface InterviewArgs {
 /* Dispatch                                                        */
 /* --------------------------------------------------------------- */
 
-const INTERVIEW_ACTIONS = [
+export const INTERVIEW_ACTIONS = [
   'start', 'add-question', 'answer', 'gap-check', 'suggest-questions', 'attach',
   'review', 'annotate', 'status', 'list', 'inspect', 'finalize', 'abort', 'transcribe',
   'export-sheet', 'import-answers',

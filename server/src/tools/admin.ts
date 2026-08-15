@@ -15,11 +15,11 @@ import { errorReply, safe, type ToolReply } from './types.js';
  * then that area's `action`. Thin router — originals unchanged.
  */
 
-const ADMIN_AREAS = ['access', 'audit', 'correct', 'version', 'gc'] as const;
-type AdminArea = (typeof ADMIN_AREAS)[number];
+export const ADMIN_AREAS = ['access', 'audit', 'correct', 'version', 'gc'] as const;
+export type AdminArea = (typeof ADMIN_AREAS)[number];
 
 // Per-area action enums (audit is flag-driven and takes no action).
-const AREA_ACTIONS: Record<AdminArea, readonly string[] | null> = {
+export const AREA_ACTIONS: Record<AdminArea, readonly string[] | null> = {
   access: ['list', 'allow', 'deny', 'remove', 'set-default', 'check'],
   audit: null,
   correct: ['feedback', 'edit-answer', 'save-rule', 'record-answer', 'list', 'data-subject-export'],

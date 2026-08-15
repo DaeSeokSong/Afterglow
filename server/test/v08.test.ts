@@ -185,12 +185,18 @@ describe('whisper · engine selection', () => {
     expect(whisperEngine()).toBe('auto');
   });
 
-  it('transcribeWasm reports unavailable when no module/engine is installed', async () => {
+  it('transcribeWasm fails cleanly when no custom module is configured', async () => {
     const { transcribeWasm } = await import('../src/whisper.js');
-    delete process.env.AFTERGLOW_WHISPER_WASM_MODULE; // no custom module, no xenova
+    delete process.env.AFTERGLOW_WHISPER_WASM_MODULE; // no custom module
+    // Whether @xenova/transformers (an optionalDependency) is installed
+    // depends on the environment: absent → 'unavailable'; present → the
+    // bogus media path makes the real engine error out → 'failed'. Either
+    // way it must fail without throwing.
+    let xenovaPresent = true;
+    try { await import('@xenova/transformers' as string); } catch { xenovaPresent = false; }
     const r = await transcribeWasm({ mediaPath: '/nope.wav' });
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.reason).toBe('unavailable');
+    if (!r.ok) expect(r.reason).toBe(xenovaPresent ? 'failed' : 'unavailable');
   });
 });
 

@@ -20,7 +20,7 @@ import { errorReply, safe, type ToolReply } from './types.js';
  * tests that import the originals directly) stays identical.
  */
 
-const AGENT_ACTIONS = [
+export const AGENT_ACTIONS = [
   'list', 'status', 'inspect', 'edit', 'sign', 'resume',
   'archive', 'restore', 'history', 'init',
 ] as const;

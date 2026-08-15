@@ -50,6 +50,51 @@ claude mcp add afterglow npx -y @daeseoksong/afterglow-mcp
 
 No separate GPU, embedding API, or server. **Free.**
 
+<a href="cursor://anysphere.cursor-deeplink/mcp/install?name=afterglow&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBkYWVzZW9rc29uZy9hZnRlcmdsb3ctbWNwIl19"><img alt="Install in Cursor" src="https://img.shields.io/badge/Cursor-install_one--click-29261b?style=flat-square&color=B5482C"></a>
+
+<details>
+<summary><b>Install in other MCP clients</b> (Claude Desktop · Cursor · VS Code · Windsurf · Codex · Gemini CLI)</summary>
+
+The standard config every client understands:
+
+```json
+{
+  "mcpServers": {
+    "afterglow": {
+      "command": "npx",
+      "args": ["-y", "@daeseoksong/afterglow-mcp"]
+    }
+  }
+}
+```
+
+**Claude Desktop** — add the block above to `claude_desktop_config.json` (Settings → Developer → Edit Config).
+
+**Cursor** — use the one-click badge above, or add the block to `~/.cursor/mcp.json` (or `.cursor/mcp.json` per project).
+
+**VS Code** —
+```bash
+code --add-mcp '{"name":"afterglow","command":"npx","args":["-y","@daeseoksong/afterglow-mcp"]}'
+```
+or add to `.vscode/mcp.json` using the `"servers"` key.
+
+**Windsurf** — add the block to `~/.codeium/windsurf/mcp_config.json`.
+
+**Codex CLI** — in `~/.codex/config.toml`:
+```toml
+[mcp_servers.afterglow]
+command = "npx"
+args = ["-y", "@daeseoksong/afterglow-mcp"]
+```
+
+**Gemini CLI** — add the block to `~/.gemini/settings.json`.
+
+**Lighter surface (optional)** — expose only the 4 happy-path tools (`guide` · `create` · `learn` · `ask`) by adding `"env": {"AFTERGLOW_TOOLSETS": "core"}` to the config (or `--toolsets core` as an extra arg). Fewer tools helps the model's tool choice and trims context; switch back to `all` any time.
+
+</details>
+
+> `npx @daeseoksong/afterglow-mcp --help` prints usage; `--version` prints the version (the bare command starts the stdio server, which is what clients run).
+
 ## ⏱ 30-second start
 
 Three steps — no `init` ceremony:
@@ -97,11 +142,14 @@ Four you'll use every day, four routers for everything else. The root [README](.
 
 Omit a required `action`/`area` and the tool replies with a numbered menu instead of an error. Mutating actions honour the agent's `access` policy when a `caller` (`user:` / `role:` / `team:`) is supplied.
 
+Every tool ships MCP **annotations** so clients can calibrate approval prompts: `guide`/`ask` are `readOnlyHint` (safe to auto-approve), `admin` is `destructiveHint` (gc apply purges), `learn` is `openWorldHint` (its `url` mode fetches). Slash-command arguments support MCP **completions** — clients that implement `completion/complete` autocomplete registered slugs and the action/area vocabularies (the `admin` action list narrows to the chosen area).
+
 ## ⚙ Environment variables
 
 | Var | Default | Purpose |
 | --- | --- | --- |
 | `AFTERGLOW_ROOT` | `~/.claude/afterglow` | Data root. Point at a temp dir to isolate tests/dev. |
+| `AFTERGLOW_TOOLSETS` | `all` | `core` exposes only `guide`/`create`/`learn`/`ask` (and their prompts) — a smaller surface helps tool choice. Also available as the `--toolsets core` CLI flag. |
 | `AFTERGLOW_ALLOW_DRAFT` | unset | `1` bypasses the active-gate on `ask` (debug). |
 | `AFTERGLOW_RAG_BACKEND` | `lexical` | `dense` enables the embedding backend (needs `AFTERGLOW_EMBED_ENDPOINT`; falls back to lexical on failure). |
 | `AFTERGLOW_RAG_HYBRID` | on (when dense) | `off` to use pure dense; default fuses dense + lexical via **RRF**. |
